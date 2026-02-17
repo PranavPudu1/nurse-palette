@@ -47,6 +47,19 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        shift: {
+          day: "hsl(var(--shift-day))",
+          "day-foreground": "hsl(var(--shift-day-foreground))",
+          night: "hsl(var(--shift-night))",
+          "night-foreground": "hsl(var(--shift-night-foreground))",
+          off: "hsl(var(--shift-off))",
+          "off-foreground": "hsl(var(--shift-off-foreground))",
+        },
+        grid: {
+          border: "hsl(var(--grid-border))",
+          header: "hsl(var(--grid-header))",
+          hover: "hsl(var(--grid-hover))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
