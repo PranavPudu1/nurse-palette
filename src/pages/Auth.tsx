@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Play } from "lucide-react";
 
 const Auth = () => {
   const { user, loading, signIn, signUp } = useAuth();
@@ -11,7 +9,6 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
   if (user) return <Navigate to="/" replace />;
@@ -31,21 +28,6 @@ const Auth = () => {
       toast.error(err.message || "Auth failed");
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleDemo = async () => {
-    setDemoLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("demo-login");
-      if (error) throw error;
-      const { email: demoEmail, password: demoPassword } = data;
-      await signIn(demoEmail, demoPassword);
-      toast.success("Welcome to the demo!");
-    } catch (err: any) {
-      toast.error(err.message || "Demo login failed");
-    } finally {
-      setDemoLoading(false);
     }
   };
 
@@ -99,14 +81,14 @@ const Auth = () => {
           <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or</span></div>
         </div>
 
-        <button
-          onClick={handleDemo}
-          disabled={demoLoading}
-          className="w-full h-10 rounded-md border border-input bg-card text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
-        >
-          <Play className="w-4 h-4" />
-          {demoLoading ? "Setting up demo…" : "Try Demo (Manager)"}
-        </button>
+        <div className="rounded-md border border-border bg-muted/50 p-4 space-y-2 text-sm">
+          <p className="font-medium text-foreground">Demo Accounts</p>
+          <div className="space-y-1 text-muted-foreground">
+            <p><span className="font-medium text-foreground">Manager:</span> demomanager@demo.com</p>
+            <p><span className="font-medium text-foreground">Nurse:</span> demonurse@demo.com</p>
+            <p><span className="font-medium text-foreground">Password:</span> demo123</p>
+          </div>
+        </div>
 
         <p className="text-center text-sm text-muted-foreground">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
