@@ -16,28 +16,24 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const demoEmail = "demo@nursescheduler.app";
-  const demoPassword = "demo123456";
+  const managerEmail = "demomanager@demo.com";
+  const nurseEmail = "demonurse@demo.com";
+  const password = "demo123";
 
-  const seedDemoData = async () => {
-    const { count } = await supabaseAdmin
-      .from("nurses")
-      .select("id", { count: "exact", head: true });
+  const ensureUser = async (email: string) => {
+    const { data: signIn } = await supabaseAdmin.auth.signInWithPassword({ email, password });
+    if (signIn.user) return signIn.user;
 
-    if (count && count > 0) return;
+    const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (error) throw error;
+    return created.user;
+  };
 
-    const { data: nurses } = await supabaseAdmin
-      .from("nurses")
-      .insert([
-        { name: "Sarah Johnson", email: "sarah@hospital.com", department: "ICU", invite_status: "pending" },
-        { name: "Mike Chen", email: "mike@hospital.com", department: "ER", invite_status: "pending" },
-        { name: "Emily Davis", email: "emily@hospital.com", department: "Pediatrics", invite_status: "pending" },
-        { name: "Raj Patel", email: "raj@hospital.com", department: "Surgery", invite_status: "pending" },
-      ])
-      .select();
-
-    if (!nurses || nurses.length === 0) return;
-
+  const seedDemoData = async (managerNurses: { nurse_id: string }[]) => {
     const today = new Date();
     const year = today.getFullYear();
     const month = today.getMonth();
@@ -45,12 +41,12 @@ Deno.serve(async (req) => {
     const shifts = ["D", "N", "X"];
     const rows: { nurse_id: string; date: string; shift_type: string }[] = [];
 
-    for (const nurse of nurses) {
+    for (const { nurse_id } of managerNurses) {
       for (let d = 1; d <= daysInMonth; d++) {
         const shift = shifts[Math.floor(Math.random() * shifts.length)];
         if (shift !== "X") {
           const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-          rows.push({ nurse_id: nurse.id, date: dateStr, shift_type: shift });
+          rows.push({ nurse_id, date: dateStr, shift_type: shift });
         }
       }
     }
@@ -61,46 +57,56 @@ Deno.serve(async (req) => {
   };
 
   try {
-    // Try signing in first to check if account exists
-    const { data: signInData, error: signInError } =
-      await supabaseAdmin.auth.signInWithPassword({
-        email: demoEmail,
-        password: demoPassword,
-      });
+    // 1. Create manager
+    const managerUser = await ensureUser(managerEmail);
+    await supabaseAdmin.from("managers").upsert({ id: managerUser.id });
 
-    if (!signInError && signInData.user) {
-      await supabaseAdmin.from("managers").upsert({ id: signInData.user.id });
-      await seedDemoData();
+    // 2. Create nurse user
+    const nurseUser = await ensureUser(nurseEmail);
 
-      return new Response(
-        JSON.stringify({ email: demoEmail, password: demoPassword }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // 3. Ensure nurse record exists
+    const { data: existingNurse } = await supabaseAdmin
+      .from("nurses")
+      .select("id")
+      .eq("email", nurseEmail)
+      .maybeSingle();
+
+    let nurseId: string;
+    if (existingNurse) {
+      nurseId = existingNurse.id;
+      await supabaseAdmin.from("nurses").update({ user_id: nurseUser.id, invite_status: "accepted" }).eq("id", nurseId);
+    } else {
+      const { data: newNurse } = await supabaseAdmin
+        .from("nurses")
+        .insert({ name: "Demo Nurse", email: nurseEmail, department: "ICU", user_id: nurseUser.id, invite_status: "accepted" })
+        .select()
+        .single();
+      nurseId = newNurse!.id;
     }
 
-    // Account doesn't exist, create it
-    const { data: createData, error: createError } =
-      await supabaseAdmin.auth.admin.createUser({
-        email: demoEmail,
-        password: demoPassword,
-        email_confirm: true,
-      });
-    if (createError) throw createError;
+    // 4. Seed additional nurses + schedules if empty
+    const { count } = await supabaseAdmin.from("nurses").select("id", { count: "exact", head: true });
+    if (count && count <= 1) {
+      const { data: extras } = await supabaseAdmin
+        .from("nurses")
+        .insert([
+          { name: "Sarah Johnson", department: "ICU", invite_status: "pending" },
+          { name: "Mike Chen", department: "ER", invite_status: "pending" },
+          { name: "Emily Davis", department: "ICU", invite_status: "pending" },
+        ])
+        .select();
 
-    if (createData.user) {
-      await supabaseAdmin.from("managers").upsert({ id: createData.user.id });
+      const allNurseIds = [{ nurse_id: nurseId }, ...(extras || []).map((n) => ({ nurse_id: n.id }))];
+      await seedDemoData(allNurseIds);
     }
 
-    await seedDemoData();
-
-    return new Response(
-      JSON.stringify({ email: demoEmail, password: demoPassword }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error: any) {
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
