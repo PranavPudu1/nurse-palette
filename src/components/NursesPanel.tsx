@@ -82,6 +82,7 @@ export function NursesPanel() {
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">Email</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Phone</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Dept</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">Status</th>
                 <th className="px-4 py-2.5 w-24" />
               </tr>
             </thead>
@@ -105,6 +106,15 @@ export function NursesPanel() {
                       <td className="px-4 py-2.5 text-sm text-muted-foreground hidden sm:table-cell">{n.email || "—"}</td>
                       <td className="px-4 py-2.5 text-sm text-muted-foreground hidden md:table-cell">{n.phone || "—"}</td>
                       <td className="px-4 py-2.5 text-sm text-muted-foreground hidden md:table-cell">{n.department || "—"}</td>
+                      <td className="px-4 py-2.5 hidden sm:table-cell">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          n.invite_status === "accepted"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {n.invite_status === "accepted" ? "Active" : "Pending"}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5 flex gap-1">
                         <button onClick={() => startEdit(n)} className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"><Pencil className="w-4 h-4" /></button>
                         <button onClick={() => { if (confirm(`Remove ${n.name}?`)) removeNurse.mutate(n.id); }} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>

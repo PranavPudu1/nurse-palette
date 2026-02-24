@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Play } from "lucide-react";
 
 const Auth = () => {
   const { user, loading, signIn, signUp } = useAuth();
@@ -9,6 +11,7 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
   if (user) return <Navigate to="/" replace />;
@@ -31,13 +34,28 @@ const Auth = () => {
     }
   };
 
+  const handleDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("demo-login");
+      if (error) throw error;
+      const { email: demoEmail, password: demoPassword } = data;
+      await signIn(demoEmail, demoPassword);
+      toast.success("Welcome to the demo!");
+    } catch (err: any) {
+      toast.error(err.message || "Demo login failed");
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight">Nurse Scheduler</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {isLogin ? "Sign in to manage schedules" : "Create a manager account"}
+            {isLogin ? "Sign in to manage schedules" : "Create an account"}
           </p>
         </div>
 
@@ -51,7 +69,7 @@ const Auth = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              placeholder="manager@hospital.com"
+              placeholder="you@hospital.com"
             />
           </div>
           <div>
@@ -75,6 +93,20 @@ const Auth = () => {
             {submitting ? "Please wait…" : isLogin ? "Sign In" : "Sign Up"}
           </button>
         </form>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+          <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or</span></div>
+        </div>
+
+        <button
+          onClick={handleDemo}
+          disabled={demoLoading}
+          className="w-full h-10 rounded-md border border-input bg-card text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
+        >
+          <Play className="w-4 h-4" />
+          {demoLoading ? "Setting up demo…" : "Try Demo (Manager)"}
+        </button>
 
         <p className="text-center text-sm text-muted-foreground">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}

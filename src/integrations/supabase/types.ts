@@ -35,27 +35,33 @@ export type Database = {
           department: string | null
           email: string | null
           id: string
+          invite_status: string
           name: string
           phone: string | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
           department?: string | null
           email?: string | null
           id?: string
+          invite_status?: string
           name: string
           phone?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
           department?: string | null
           email?: string | null
           id?: string
+          invite_status?: string
           name?: string
           phone?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -99,6 +105,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_accepted_nurse: { Args: { _user_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
     }
     Enums: {
