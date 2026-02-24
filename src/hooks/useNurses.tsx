@@ -32,7 +32,11 @@ export function useAddNurse() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (nurse: { name: string; email?: string; phone?: string; department?: string }) => {
-      const { data, error } = await supabase.from("nurses").insert(nurse).select().single();
+      const payload = {
+        ...nurse,
+        email: nurse.email?.trim().toLowerCase() || null,
+      };
+      const { data, error } = await supabase.from("nurses").insert(payload).select().single();
       if (error) throw error;
       return data;
     },
@@ -45,7 +49,11 @@ export function useUpdateNurse() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; name?: string; email?: string; phone?: string; department?: string }) => {
-      const { error } = await supabase.from("nurses").update(updates).eq("id", id);
+      const payload = {
+        ...updates,
+        email: updates.email?.trim().toLowerCase() || null,
+      };
+      const { error } = await supabase.from("nurses").update(payload).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["nurses"] }); toast.success("Nurse updated"); },
