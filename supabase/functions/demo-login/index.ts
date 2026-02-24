@@ -19,6 +19,47 @@ Deno.serve(async (req) => {
   const demoEmail = "demo@nursescheduler.app";
   const demoPassword = "demo123456";
 
+  const seedDemoData = async () => {
+    const { count } = await supabaseAdmin
+      .from("nurses")
+      .select("id", { count: "exact", head: true });
+
+    if (count && count > 0) return;
+
+    const { data: nurses } = await supabaseAdmin
+      .from("nurses")
+      .insert([
+        { name: "Sarah Johnson", email: "sarah@hospital.com", department: "ICU", invite_status: "pending" },
+        { name: "Mike Chen", email: "mike@hospital.com", department: "ER", invite_status: "pending" },
+        { name: "Emily Davis", email: "emily@hospital.com", department: "Pediatrics", invite_status: "pending" },
+        { name: "Raj Patel", email: "raj@hospital.com", department: "Surgery", invite_status: "pending" },
+      ])
+      .select();
+
+    if (!nurses || nurses.length === 0) return;
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const shifts = ["D", "N", "X"];
+    const rows: { nurse_id: string; date: string; shift_type: string }[] = [];
+
+    for (const nurse of nurses) {
+      for (let d = 1; d <= daysInMonth; d++) {
+        const shift = shifts[Math.floor(Math.random() * shifts.length)];
+        if (shift !== "X") {
+          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          rows.push({ nurse_id: nurse.id, date: dateStr, shift_type: shift });
+        }
+      }
+    }
+
+    if (rows.length > 0) {
+      await supabaseAdmin.from("schedules").insert(rows);
+    }
+  };
+
   try {
     // Try signing in first to check if account exists
     const { data: signInData, error: signInError } =
@@ -28,7 +69,9 @@ Deno.serve(async (req) => {
       });
 
     if (!signInError && signInData.user) {
-      // Account exists, return credentials
+      await supabaseAdmin.from("managers").upsert({ id: signInData.user.id });
+      await seedDemoData();
+
       return new Response(
         JSON.stringify({ email: demoEmail, password: demoPassword }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -44,43 +87,11 @@ Deno.serve(async (req) => {
       });
     if (createError) throw createError;
 
-    // Wait for trigger to create manager record
-    await new Promise((r) => setTimeout(r, 500));
-
-    // Seed demo nurses
-    const { data: nurses } = await supabaseAdmin
-      .from("nurses")
-      .insert([
-        { name: "Sarah Johnson", email: "sarah@hospital.com", department: "ICU", invite_status: "pending" },
-        { name: "Mike Chen", email: "mike@hospital.com", department: "ER", invite_status: "pending" },
-        { name: "Emily Davis", email: "emily@hospital.com", department: "Pediatrics", invite_status: "pending" },
-        { name: "Raj Patel", email: "raj@hospital.com", department: "Surgery", invite_status: "pending" },
-      ])
-      .select();
-
-    // Seed schedules for current month
-    if (nurses && nurses.length > 0) {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = today.getMonth();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const shifts = ["D", "N", "X"];
-      const rows: { nurse_id: string; date: string; shift_type: string }[] = [];
-
-      for (const nurse of nurses) {
-        for (let d = 1; d <= daysInMonth; d++) {
-          const shift = shifts[Math.floor(Math.random() * shifts.length)];
-          if (shift !== "X") {
-            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-            rows.push({ nurse_id: nurse.id, date: dateStr, shift_type: shift });
-          }
-        }
-      }
-
-      if (rows.length > 0) {
-        await supabaseAdmin.from("schedules").insert(rows);
-      }
+    if (createData.user) {
+      await supabaseAdmin.from("managers").upsert({ id: createData.user.id });
     }
+
+    await seedDemoData();
 
     return new Response(
       JSON.stringify({ email: demoEmail, password: demoPassword }),
