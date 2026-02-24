@@ -135,6 +135,10 @@ export type Database = {
       }
     }
     Functions: {
+      can_read_schedule_for_department: {
+        Args: { _nurse_id: string }
+        Returns: boolean
+      }
       get_department_nurses: {
         Args: never
         Returns: {
