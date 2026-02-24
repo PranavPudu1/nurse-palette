@@ -98,13 +98,51 @@ export type Database = {
             referencedRelation: "nurses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "schedules_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
     Views: {
-      [_ in never]: never
+      nurses_public: {
+        Row: {
+          department: string | null
+          id: string | null
+          invite_status: string | null
+          name: string | null
+          user_id: string | null
+        }
+        Insert: {
+          department?: string | null
+          id?: string | null
+          invite_status?: string | null
+          name?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          department?: string | null
+          id?: string | null
+          invite_status?: string | null
+          name?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      get_department_nurses: {
+        Args: never
+        Returns: {
+          department: string
+          id: string
+          name: string
+        }[]
+      }
       is_accepted_nurse: { Args: { _user_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
     }
