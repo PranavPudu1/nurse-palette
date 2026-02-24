@@ -8,6 +8,8 @@ export interface DbNurse {
   email: string | null;
   phone: string | null;
   department: string | null;
+  user_id: string | null;
+  invite_status: string;
   created_at: string;
   updated_at: string;
 }
