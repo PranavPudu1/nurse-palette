@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNurses } from "@/hooks/useNurses";
+import { useDepartmentNurses } from "@/hooks/useDepartmentNurses";
 import { useSchedules } from "@/hooks/useSchedules";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
 import { MonthSelector } from "@/components/MonthSelector";
@@ -13,6 +14,7 @@ const now = new Date();
 const NurseView = () => {
   const { user, signOut } = useAuth();
   const { data: nurses = [] } = useNurses();
+  const { data: departmentNurses = [] } = useDepartmentNurses();
 
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -36,10 +38,10 @@ const NurseView = () => {
     [myNurse]
   );
 
-  // All nurses for team view
+  // Department nurses for team view (no sensitive data exposed)
   const allGridNurses = useMemo(() =>
-    nurses.map(n => ({ id: n.id, name: n.name })),
-    [nurses]
+    departmentNurses.map(n => ({ id: n.id, name: n.name })),
+    [departmentNurses]
   );
 
   return (
