@@ -7,7 +7,7 @@ interface AuthContext {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, role?: "manager" | "nurse") => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -40,9 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string, role?: "manager" | "nurse") => {
     const normalizedEmail = email.trim().toLowerCase();
-    const { error } = await supabase.auth.signUp({ email: normalizedEmail, password });
+    const { error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: role ? { data: { role } } : undefined,
+    });
     if (error) throw error;
   }, []);
 
