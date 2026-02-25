@@ -8,6 +8,7 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"manager" | "nurse">("nurse");
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
@@ -21,7 +22,7 @@ const Auth = () => {
         await signIn(email, password);
         toast.success("Signed in!");
       } else {
-        await signUp(email, password);
+        await signUp(email, password, role);
         toast.success("Account created! You're now signed in.");
       }
     } catch (err: any) {
@@ -67,6 +68,35 @@ const Auth = () => {
               placeholder="••••••••"
             />
           </div>
+          {!isLogin && (
+            <div>
+              <label className="text-sm font-medium">Role</label>
+              <div className="mt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRole("nurse")}
+                  className={`flex-1 h-10 rounded-md border text-sm font-medium transition-colors ${
+                    role === "nurse"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-input hover:bg-muted"
+                  }`}
+                >
+                  Nurse
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("manager")}
+                  className={`flex-1 h-10 rounded-md border text-sm font-medium transition-colors ${
+                    role === "manager"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-input hover:bg-muted"
+                  }`}
+                >
+                  Manager
+                </button>
+              </div>
+            </div>
+          )}
           <button
             type="submit"
             disabled={submitting}
