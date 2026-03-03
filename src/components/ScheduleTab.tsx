@@ -1,22 +1,33 @@
 import { useState, useMemo } from "react";
 import { useNurses } from "@/hooks/useNurses";
 import { useSchedules, useUpsertShift } from "@/hooks/useSchedules";
+import { useWardConfig } from "@/hooks/useWardConfig";
+import { useExclusions } from "@/hooks/useExclusions";
 import { cycleShift, dateKey, ShiftType } from "@/lib/scheduler-data";
+import { validateSchedule } from "@/lib/schedule-constraints";
+import type { NurseWithLevel, WardConfig } from "@/lib/schedule-constraints";
 import { exportScheduleCSV } from "@/lib/export-csv";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
+import { ScheduleComparison } from "@/components/ScheduleComparison";
 import { MonthSelector } from "@/components/MonthSelector";
 import { Legend } from "@/components/Legend";
-import { Download } from "lucide-react";
+import { Download, Wand2, Loader2, AlertTriangle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 const now = new Date();
 
 export function ScheduleTab() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
+  const [generating, setGenerating] = useState(false);
+  const [generatedOptions, setGeneratedOptions] = useState<any[] | null>(null);
 
   const { data: nurses = [] } = useNurses();
   const { data: schedule = {}, isLoading } = useSchedules(year, month);
   const upsertShift = useUpsertShift();
+  const { data: wardConfigs = [] } = useWardConfig();
+  const { data: exclusions = [] } = useExclusions();
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
@@ -37,20 +48,108 @@ export function ScheduleTab() {
     upsertShift.mutate({ nurseId, date: key, shiftType: "X" });
   };
 
+  const nursesWithLevel: NurseWithLevel[] = useMemo(() =>
+    nurses.map((n) => ({ id: n.id, name: n.name, level: n.level ?? 1 })),
+    [nurses]
+  );
+
   const gridNurses = useMemo(() =>
     nurses.map((n) => ({ id: n.id, name: n.name })),
     [nurses]
   );
 
+  const mappedConfigs: WardConfig[] = useMemo(() =>
+    wardConfigs.map((c) => ({
+      shift_type: c.shift_type,
+      required_nurses: c.required_nurses,
+      level_mix: (c.level_mix && typeof c.level_mix === 'object' && !Array.isArray(c.level_mix))
+        ? c.level_mix as Record<string, number>
+        : {},
+    })),
+    [wardConfigs]
+  );
+
+  const violations = useMemo(() =>
+    nursesWithLevel.length > 0
+      ? validateSchedule(nursesWithLevel, schedule, year, month, mappedConfigs, exclusions)
+      : [],
+    [nursesWithLevel, schedule, year, month, mappedConfigs, exclusions]
+  );
+
+  const errorCount = violations.filter((v) => v.severity === "error").length;
+  const warnCount = violations.filter((v) => v.severity === "warning").length;
+
   const handleExport = () => {
     exportScheduleCSV(gridNurses, schedule, year, month);
   };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-schedule", {
+        body: { year, month },
+      });
+      if (error) throw error;
+      setGeneratedOptions(data.options);
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleApplySchedule = async (newSchedule: Record<string, Record<string, ShiftType>>) => {
+    // Batch upsert all shifts
+    const rows: { nurse_id: string; date: string; shift_type: string }[] = [];
+    for (const [nurseId, dates] of Object.entries(newSchedule)) {
+      for (const [date, shiftType] of Object.entries(dates)) {
+        rows.push({ nurse_id: nurseId, date, shift_type: shiftType });
+      }
+    }
+
+    const { error } = await supabase
+      .from("schedules")
+      .upsert(rows, { onConflict: "nurse_id,date" });
+
+    if (error) {
+      toast({ title: "Apply failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Schedule applied", description: "The generated schedule has been saved." });
+      setGeneratedOptions(null);
+      // Force refresh
+      window.location.reload();
+    }
+  };
+
+  // Show comparison view
+  if (generatedOptions) {
+    return (
+      <ScheduleComparison
+        options={generatedOptions}
+        nurses={nursesWithLevel}
+        year={year}
+        month={month}
+        wardConfigs={mappedConfigs}
+        exclusions={exclusions}
+        onApply={handleApplySchedule}
+        onClose={() => setGeneratedOptions(null)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
         <MonthSelector year={year} month={month} onPrev={prevMonth} onNext={nextMonth} />
         <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={handleGenerate}
+            disabled={nurses.length === 0 || generating}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+          >
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            {generating ? "Generating…" : "Auto-Generate"}
+          </button>
           <button
             onClick={handleExport}
             disabled={nurses.length === 0}
@@ -61,6 +160,18 @@ export function ScheduleTab() {
           <Legend />
         </div>
       </div>
+
+      {/* Violation summary */}
+      {(errorCount > 0 || warnCount > 0) && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="text-amber-800">
+            {errorCount > 0 && <span className="font-semibold text-destructive">{errorCount} errors</span>}
+            {errorCount > 0 && warnCount > 0 && " · "}
+            {warnCount > 0 && <span className="font-semibold text-amber-600">{warnCount} warnings</span>}
+          </span>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="py-12 text-center text-muted-foreground">Loading schedule…</div>
@@ -73,6 +184,7 @@ export function ScheduleTab() {
           year={year}
           month={month}
           readOnly={false}
+          violations={violations}
           onCellClick={handleCellClick}
           onCellClear={handleCellClear}
         />
