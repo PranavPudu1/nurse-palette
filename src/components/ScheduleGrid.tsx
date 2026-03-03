@@ -54,7 +54,7 @@ export function ScheduleGrid({
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-auto rounded-lg border border-grid-border bg-card shadow-sm">
-        <table className="border-collapse">
+        <table className="border-collapse" style={{ overflow: "visible" }}>
           <thead>
             <tr>
               <th className="sticky left-0 z-20 bg-grid-header px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider min-w-[160px] border-b border-r border-grid-border">
