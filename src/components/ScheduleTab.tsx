@@ -39,15 +39,19 @@ export function ScheduleTab() {
     else setMonth((m) => m + 1);
   };
 
-  const handleCellClick = (nurseId: string, key: string) => {
-    const current: ShiftType = schedule[nurseId]?.[key] ?? "X";
+  const queryClient = useQueryClient();
+
+  const handleCellClick = useCallback((nurseId: string, key: string) => {
+    // Read latest value from query cache to avoid stale closure issues
+    const cached = queryClient.getQueryData<Record<string, Record<string, ShiftType>>>(["schedules", year, month]);
+    const current: ShiftType = cached?.[nurseId]?.[key] ?? schedule[nurseId]?.[key] ?? "X";
     const next = cycleShift(current);
     upsertShift.mutate({ nurseId, date: key, shiftType: next });
-  };
+  }, [queryClient, year, month, schedule, upsertShift]);
 
-  const handleCellClear = (nurseId: string, key: string) => {
+  const handleCellClear = useCallback((nurseId: string, key: string) => {
     upsertShift.mutate({ nurseId, date: key, shiftType: "X" });
-  };
+  }, [upsertShift]);
 
   const nursesWithLevel: NurseWithLevel[] = useMemo(() =>
     nurses.map((n) => ({ id: n.id, name: n.name, level: n.level ?? 1 })),
