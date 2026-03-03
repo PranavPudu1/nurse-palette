@@ -51,6 +51,11 @@
     --grid-header: 210 25% 96%;
     --grid-hover: 210 40% 94%;
 
+    /* Validation */
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 20%;
+    --warning-bg: 48 96% 95%;
+
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
