@@ -37,6 +37,32 @@ export function useUpsertShift() {
         .upsert({ nurse_id: nurseId, date, shift_type: shiftType }, { onConflict: "nurse_id,date" });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
+    onMutate: async ({ nurseId, date, shiftType }) => {
+      // Cancel outgoing refetches
+      await qc.cancelQueries({ queryKey: ["schedules"] });
+      // Snapshot previous
+      const previous = qc.getQueriesData<ScheduleData>({ queryKey: ["schedules"] });
+      // Optimistically update all matching queries
+      qc.setQueriesData<ScheduleData>({ queryKey: ["schedules"] }, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          [nurseId]: {
+            ...(old[nurseId] ?? {}),
+            [date]: shiftType,
+          },
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      // Rollback on error
+      if (context?.previous) {
+        for (const [key, data] of context.previous) {
+          qc.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
   });
 }
