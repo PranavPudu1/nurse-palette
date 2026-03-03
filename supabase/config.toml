@@ -1,1 +1,7 @@
 project_id = "cxmjgbahkunsgtvbxhym"
+
+[functions.demo-login]
+verify_jwt = false
+
+[functions.generate-schedule]
+verify_jwt = false
