@@ -29,6 +29,146 @@ export type Database = {
         }
         Relationships: []
       }
+      nurse_exclusions: {
+        Row: {
+          created_at: string
+          id: string
+          nurse_id_1: string
+          nurse_id_2: string
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nurse_id_1: string
+          nurse_id_2: string
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nurse_id_1?: string
+          nurse_id_2?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nurse_exclusions_nurse_id_1_fkey"
+            columns: ["nurse_id_1"]
+            isOneToOne: false
+            referencedRelation: "nurses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nurse_exclusions_nurse_id_1_fkey"
+            columns: ["nurse_id_1"]
+            isOneToOne: false
+            referencedRelation: "nurses_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nurse_exclusions_nurse_id_2_fkey"
+            columns: ["nurse_id_2"]
+            isOneToOne: false
+            referencedRelation: "nurses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nurse_exclusions_nurse_id_2_fkey"
+            columns: ["nurse_id_2"]
+            isOneToOne: false
+            referencedRelation: "nurses_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nurse_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          nurse_id: string
+          prefers_night: boolean
+          prefers_weekday: boolean
+          prefers_weekend: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          nurse_id: string
+          prefers_night?: boolean
+          prefers_weekday?: boolean
+          prefers_weekend?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          nurse_id?: string
+          prefers_night?: boolean
+          prefers_weekday?: boolean
+          prefers_weekend?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nurse_preferences_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: true
+            referencedRelation: "nurses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nurse_preferences_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: true
+            referencedRelation: "nurses_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nurse_unavailability: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          nurse_id: string
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          nurse_id: string
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          nurse_id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nurse_unavailability_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nurse_unavailability_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nurses: {
         Row: {
           created_at: string
@@ -36,6 +176,7 @@ export type Database = {
           email: string | null
           id: string
           invite_status: string
+          level: number
           name: string
           phone: string | null
           updated_at: string
@@ -47,6 +188,7 @@ export type Database = {
           email?: string | null
           id?: string
           invite_status?: string
+          level?: number
           name: string
           phone?: string | null
           updated_at?: string
@@ -58,6 +200,7 @@ export type Database = {
           email?: string | null
           id?: string
           invite_status?: string
+          level?: number
           name?: string
           phone?: string | null
           updated_at?: string
@@ -106,6 +249,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ward_shift_config: {
+        Row: {
+          created_at: string
+          department: string
+          id: string
+          level_mix: Json
+          required_nurses: number
+          shift_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department?: string
+          id?: string
+          level_mix?: Json
+          required_nurses?: number
+          shift_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department?: string
+          id?: string
+          level_mix?: Json
+          required_nurses?: number
+          shift_type?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
