@@ -39,6 +39,8 @@
     /* Shift colors */
     --shift-day: 45 93% 60%;
     --shift-day-foreground: 40 50% 20%;
+    --shift-evening: 25 90% 55%;
+    --shift-evening-foreground: 0 0% 100%;
     --shift-night: 270 50% 55%;
     --shift-night-foreground: 0 0% 100%;
     --shift-off: 210 15% 92%;

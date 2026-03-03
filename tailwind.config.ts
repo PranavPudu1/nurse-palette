@@ -50,6 +50,8 @@ export default {
         shift: {
           day: "hsl(var(--shift-day))",
           "day-foreground": "hsl(var(--shift-day-foreground))",
+          evening: "hsl(var(--shift-evening))",
+          "evening-foreground": "hsl(var(--shift-evening-foreground))",
           night: "hsl(var(--shift-night))",
           "night-foreground": "hsl(var(--shift-night-foreground))",
           off: "hsl(var(--shift-off))",

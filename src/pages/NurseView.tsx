@@ -6,8 +6,9 @@ import { useSchedules } from "@/hooks/useSchedules";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
 import { MonthSelector } from "@/components/MonthSelector";
 import { Legend } from "@/components/Legend";
+import { NursePreferencesPanel } from "@/components/NursePreferencesPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { CalendarDays, Users, LogOut } from "lucide-react";
+import { CalendarDays, Users, LogOut, Settings2 } from "lucide-react";
 
 const now = new Date();
 
@@ -29,16 +30,13 @@ const NurseView = () => {
     else setMonth(m => m + 1);
   };
 
-  // Find the current nurse's record
   const myNurse = nurses.find(n => n.user_id === user?.id);
 
-  // My schedule: filter to only show my row
   const myGridNurses = useMemo(() =>
     myNurse ? [{ id: myNurse.id, name: myNurse.name }] : [],
     [myNurse]
   );
 
-  // Department nurses for team view (no sensitive data exposed)
   const allGridNurses = useMemo(() =>
     departmentNurses.map(n => ({ id: n.id, name: n.name })),
     [departmentNurses]
@@ -71,6 +69,9 @@ const NurseView = () => {
             </TabsTrigger>
             <TabsTrigger value="team" className="gap-1.5">
               <Users className="w-4 h-4" /> Team Schedule
+            </TabsTrigger>
+            <TabsTrigger value="preferences" className="gap-1.5">
+              <Settings2 className="w-4 h-4" /> Preferences
             </TabsTrigger>
           </TabsList>
 
@@ -116,6 +117,14 @@ const NurseView = () => {
                 />
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="preferences">
+            {myNurse ? (
+              <NursePreferencesPanel nurseId={myNurse.id} />
+            ) : (
+              <div className="py-12 text-center text-muted-foreground">No nurse profile found.</div>
+            )}
           </TabsContent>
         </Tabs>
       </main>
