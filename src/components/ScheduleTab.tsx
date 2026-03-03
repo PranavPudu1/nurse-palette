@@ -1,10 +1,9 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNurses } from "@/hooks/useNurses";
 import { useSchedules, useUpsertShift } from "@/hooks/useSchedules";
-import { useQueryClient } from "@tanstack/react-query";
 import { useWardConfig } from "@/hooks/useWardConfig";
 import { useExclusions } from "@/hooks/useExclusions";
-import { cycleShift, dateKey, ShiftType } from "@/lib/scheduler-data";
+import { cycleShift, dateKey, ShiftType, ScheduleData } from "@/lib/scheduler-data";
 import { validateSchedule } from "@/lib/schedule-constraints";
 import type { NurseWithLevel, WardConfig } from "@/lib/schedule-constraints";
 import { exportScheduleCSV } from "@/lib/export-csv";
@@ -24,11 +23,32 @@ export function ScheduleTab() {
   const [generating, setGenerating] = useState(false);
   const [generatedOptions, setGeneratedOptions] = useState<any[] | null>(null);
 
+  // Local overrides for immediate UI feedback
+  const [localOverrides, setLocalOverrides] = useState<Record<string, Record<string, ShiftType>>>({});
+
   const { data: nurses = [] } = useNurses();
-  const { data: schedule = {}, isLoading } = useSchedules(year, month);
+  const { data: serverSchedule = {}, isLoading } = useSchedules(year, month);
   const upsertShift = useUpsertShift();
   const { data: wardConfigs = [] } = useWardConfig();
   const { data: exclusions = [] } = useExclusions();
+
+  // Clear local overrides when server data updates (meaning server caught up)
+  const prevServerRef = useRef(serverSchedule);
+  useEffect(() => {
+    if (prevServerRef.current !== serverSchedule) {
+      prevServerRef.current = serverSchedule;
+      setLocalOverrides({});
+    }
+  }, [serverSchedule]);
+
+  // Merge server schedule with local overrides
+  const schedule: ScheduleData = useMemo(() => {
+    const merged = { ...serverSchedule };
+    for (const [nurseId, dates] of Object.entries(localOverrides)) {
+      merged[nurseId] = { ...(merged[nurseId] ?? {}), ...dates };
+    }
+    return merged;
+  }, [serverSchedule, localOverrides]);
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
@@ -39,17 +59,28 @@ export function ScheduleTab() {
     else setMonth((m) => m + 1);
   };
 
-  const queryClient = useQueryClient();
-
   const handleCellClick = useCallback((nurseId: string, key: string) => {
-    // Read latest value from query cache to avoid stale closure issues
-    const cached = queryClient.getQueryData<Record<string, Record<string, ShiftType>>>(["schedules", year, month]);
-    const current: ShiftType = cached?.[nurseId]?.[key] ?? schedule[nurseId]?.[key] ?? "X";
+    // Read from local overrides first, then server schedule
+    const current: ShiftType =
+      localOverrides[nurseId]?.[key] ??
+      serverSchedule[nurseId]?.[key] ?? "X";
     const next = cycleShift(current);
+
+    // Update local state immediately
+    setLocalOverrides((prev) => ({
+      ...prev,
+      [nurseId]: { ...(prev[nurseId] ?? {}), [key]: next },
+    }));
+
+    // Fire mutation to server
     upsertShift.mutate({ nurseId, date: key, shiftType: next });
-  }, [queryClient, year, month, schedule, upsertShift]);
+  }, [localOverrides, serverSchedule, upsertShift]);
 
   const handleCellClear = useCallback((nurseId: string, key: string) => {
+    setLocalOverrides((prev) => ({
+      ...prev,
+      [nurseId]: { ...(prev[nurseId] ?? {}), [key]: "X" as ShiftType },
+    }));
     upsertShift.mutate({ nurseId, date: key, shiftType: "X" });
   }, [upsertShift]);
 
@@ -104,7 +135,6 @@ export function ScheduleTab() {
   };
 
   const handleApplySchedule = async (newSchedule: Record<string, Record<string, ShiftType>>) => {
-    // Batch upsert all shifts
     const rows: { nurse_id: string; date: string; shift_type: string }[] = [];
     for (const [nurseId, dates] of Object.entries(newSchedule)) {
       for (const [date, shiftType] of Object.entries(dates)) {
@@ -121,12 +151,10 @@ export function ScheduleTab() {
     } else {
       toast({ title: "Schedule applied", description: "The generated schedule has been saved." });
       setGeneratedOptions(null);
-      // Force refresh
       window.location.reload();
     }
   };
 
-  // Show comparison view
   if (generatedOptions) {
     return (
       <ScheduleComparison
@@ -166,7 +194,6 @@ export function ScheduleTab() {
         </div>
       </div>
 
-      {/* Violation summary */}
       {(errorCount > 0 || warnCount > 0) && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-sm">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
