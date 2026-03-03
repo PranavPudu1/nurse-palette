@@ -3,6 +3,7 @@ import { ShiftType } from "@/lib/scheduler-data";
 export function Legend() {
   const items: { type: ShiftType; label: string; cls: string }[] = [
     { type: "D", label: "Day", cls: "bg-shift-day text-shift-day-foreground" },
+    { type: "E", label: "Evening", cls: "bg-shift-evening text-shift-evening-foreground" },
     { type: "N", label: "Night", cls: "bg-shift-night text-shift-night-foreground" },
     { type: "X", label: "Off", cls: "bg-shift-off text-shift-off-foreground" },
   ];

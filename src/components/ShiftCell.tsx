@@ -13,6 +13,7 @@ export function ShiftCell({ value, onClick, onContextMenu, readOnly }: ShiftCell
 
   const colors: Record<ShiftType, string> = {
     D: "bg-shift-day text-shift-day-foreground border-shift-day/60",
+    E: "bg-shift-evening text-shift-evening-foreground border-shift-evening/60",
     N: "bg-shift-night text-shift-night-foreground border-shift-night/60",
     X: "bg-shift-off text-shift-off-foreground border-transparent",
   };
