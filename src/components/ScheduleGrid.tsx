@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Trash2, Plus } from "lucide-react";
-import { Nurse, ScheduleData, getDaysInMonth, dateKey, cycleShift, ShiftType } from "@/lib/scheduler-data";
+import { Nurse, ScheduleData, getDaysInMonth, dateKey, ShiftType } from "@/lib/scheduler-data";
 import { ShiftCell } from "@/components/ShiftCell";
+import { ViolationIndicator } from "@/components/ViolationIndicator";
+import type { Violation } from "@/lib/schedule-constraints";
+import { buildViolationMap } from "@/lib/schedule-constraints";
 
 interface ScheduleGridProps {
   nurses: Nurse[];
@@ -9,6 +12,7 @@ interface ScheduleGridProps {
   year: number;
   month: number;
   readOnly?: boolean;
+  violations?: Violation[];
   onCellClick?: (nurseId: string, key: string) => void;
   onCellClear?: (nurseId: string, key: string) => void;
   onRemoveNurse?: (nurseId: string) => void;
@@ -23,6 +27,7 @@ export function ScheduleGrid({
   year,
   month,
   readOnly = false,
+  violations = [],
   onCellClick,
   onCellClear,
   onRemoveNurse,
@@ -30,6 +35,7 @@ export function ScheduleGrid({
 }: ScheduleGridProps) {
   const days = getDaysInMonth(year, month);
   const [newName, setNewName] = useState("");
+  const violationMap = useMemo(() => buildViolationMap(violations), [violations]);
 
   const handleAdd = () => {
     const trimmed = newName.trim();
@@ -38,6 +44,12 @@ export function ScheduleGrid({
       setNewName("");
     }
   };
+
+  // Staffing violations (not tied to a specific nurse)
+  const staffingViolations = useMemo(() =>
+    violations.filter((v) => v.nurseId === "__staffing__"),
+    [violations]
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -52,15 +64,20 @@ export function ScheduleGrid({
                 const d = i + 1;
                 const dow = new Date(year, month, d).getDay();
                 const isWeekend = dow === 0 || dow === 6;
+                const key = dateKey(year, month, d);
+                const dayStaffingIssues = staffingViolations.filter((v) => v.date === key);
                 return (
                   <th
                     key={d}
-                    className={`sticky top-0 z-10 px-1 py-1.5 text-center text-[10px] font-medium border-b border-grid-border min-w-[40px] ${
+                    className={`sticky top-0 z-10 px-1 py-1.5 text-center text-[10px] font-medium border-b border-grid-border min-w-[40px] relative ${
                       isWeekend ? "bg-accent/60 text-accent-foreground" : "bg-grid-header text-muted-foreground"
-                    }`}
+                    } ${dayStaffingIssues.length > 0 ? "bg-amber-50" : ""}`}
                   >
                     <div>{DAY_ABBR[dow]}</div>
                     <div className="text-xs font-semibold text-foreground">{d}</div>
+                    {dayStaffingIssues.length > 0 && (
+                      <ViolationIndicator violations={dayStaffingIssues} />
+                    )}
                   </th>
                 );
               })}
@@ -78,8 +95,9 @@ export function ScheduleGrid({
                 {Array.from({ length: days }, (_, i) => {
                   const key = dateKey(year, month, i + 1);
                   const val: ShiftType = schedule[nurse.id]?.[key] ?? "X";
+                  const cellViolations = violationMap[`${nurse.id}:${key}`] ?? [];
                   return (
-                    <td key={key} className="px-0.5 py-0.5 border-b border-grid-border text-center">
+                    <td key={key} className="px-0.5 py-0.5 border-b border-grid-border text-center relative">
                       <ShiftCell
                         value={val}
                         readOnly={readOnly}
@@ -89,6 +107,7 @@ export function ScheduleGrid({
                           onCellClear?.(nurse.id, key);
                         }}
                       />
+                      <ViolationIndicator violations={cellViolations} />
                     </td>
                   );
                 })}
