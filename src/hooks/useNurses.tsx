@@ -8,6 +8,7 @@ export interface DbNurse {
   email: string | null;
   phone: string | null;
   department: string | null;
+  level: number;
   user_id: string | null;
   invite_status: string;
   created_at: string;
@@ -31,7 +32,7 @@ export function useNurses() {
 export function useAddNurse() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (nurse: { name: string; email?: string; phone?: string; department?: string }) => {
+    mutationFn: async (nurse: { name: string; email?: string; phone?: string; department?: string; level?: number }) => {
       const payload = {
         ...nurse,
         email: nurse.email?.trim().toLowerCase() || null,
@@ -48,7 +49,7 @@ export function useAddNurse() {
 export function useUpdateNurse() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; name?: string; email?: string; phone?: string; department?: string }) => {
+    mutationFn: async ({ id, ...updates }: { id: string; name?: string; email?: string; phone?: string; department?: string; level?: number }) => {
       const payload = {
         ...updates,
         email: updates.email?.trim().toLowerCase() || null,

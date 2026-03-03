@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNurses, useAddNurse, useRemoveNurse, useUpdateNurse, DbNurse } from "@/hooks/useNurses";
 import { Plus, Trash2, Pencil, X, Check, User } from "lucide-react";
-import { toast } from "sonner";
 
 export function NursesPanel() {
   const { data: nurses = [], isLoading } = useNurses();
@@ -10,25 +9,37 @@ export function NursesPanel() {
   const updateNurse = useUpdateNurse();
 
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", department: "General" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", department: "General", level: "1" });
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", department: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", department: "", level: "1" });
 
   const handleAdd = () => {
     if (!form.name.trim()) return;
-    addNurse.mutate({ name: form.name, email: form.email || undefined, phone: form.phone || undefined, department: form.department || "General" });
-    setForm({ name: "", email: "", phone: "", department: "General" });
+    addNurse.mutate({
+      name: form.name,
+      email: form.email || undefined,
+      phone: form.phone || undefined,
+      department: form.department || "General",
+      level: parseInt(form.level) || 1,
+    });
+    setForm({ name: "", email: "", phone: "", department: "General", level: "1" });
     setShowAdd(false);
   };
 
   const startEdit = (n: DbNurse) => {
     setEditId(n.id);
-    setEditForm({ name: n.name, email: n.email || "", phone: n.phone || "", department: n.department || "" });
+    setEditForm({
+      name: n.name,
+      email: n.email || "",
+      phone: n.phone || "",
+      department: n.department || "",
+      level: String(n.level ?? 1),
+    });
   };
 
   const saveEdit = () => {
     if (!editId || !editForm.name.trim()) return;
-    updateNurse.mutate({ id: editId, ...editForm });
+    updateNurse.mutate({ id: editId, name: editForm.name, email: editForm.email, phone: editForm.phone, department: editForm.department, level: parseInt(editForm.level) || 1 });
     setEditId(null);
   };
 
@@ -48,7 +59,7 @@ export function NursesPanel() {
 
       {showAdd && (
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <input placeholder="Name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
             <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -57,6 +68,13 @@ export function NursesPanel() {
               className="px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
             <input placeholder="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}
               className="px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground whitespace-nowrap">Level:</label>
+              <select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })}
+                className="px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/30 w-full">
+                {[1,2,3,4,5].map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
           </div>
           <div className="flex gap-2">
             <button onClick={handleAdd} disabled={!form.name.trim() || addNurse.isPending}
@@ -79,8 +97,8 @@ export function NursesPanel() {
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase">Name</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase w-16">Lvl</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">Email</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Phone</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Dept</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">Status</th>
                 <th className="px-4 py-2.5 w-24" />
@@ -92,9 +110,14 @@ export function NursesPanel() {
                   {editId === n.id ? (
                     <>
                       <td className="px-4 py-2"><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="px-2 py-1 text-sm rounded border border-input bg-background w-full" /></td>
+                      <td className="px-4 py-2">
+                        <select value={editForm.level} onChange={(e) => setEditForm({ ...editForm, level: e.target.value })} className="px-2 py-1 text-sm rounded border border-input bg-background w-full">
+                          {[1,2,3,4,5].map(l => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                      </td>
                       <td className="px-4 py-2 hidden sm:table-cell"><input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="px-2 py-1 text-sm rounded border border-input bg-background w-full" /></td>
-                      <td className="px-4 py-2 hidden md:table-cell"><input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="px-2 py-1 text-sm rounded border border-input bg-background w-full" /></td>
                       <td className="px-4 py-2 hidden md:table-cell"><input value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} className="px-2 py-1 text-sm rounded border border-input bg-background w-full" /></td>
+                      <td className="hidden sm:table-cell" />
                       <td className="px-4 py-2 flex gap-1">
                         <button onClick={saveEdit} className="p-1.5 rounded hover:bg-primary/10 text-primary"><Check className="w-4 h-4" /></button>
                         <button onClick={() => setEditId(null)} className="p-1.5 rounded hover:bg-muted text-muted-foreground"><X className="w-4 h-4" /></button>
@@ -103,8 +126,10 @@ export function NursesPanel() {
                   ) : (
                     <>
                       <td className="px-4 py-2.5 text-sm font-medium flex items-center gap-2"><User className="w-4 h-4 text-muted-foreground" />{n.name}</td>
+                      <td className="px-4 py-2.5 text-sm">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold">{n.level}</span>
+                      </td>
                       <td className="px-4 py-2.5 text-sm text-muted-foreground hidden sm:table-cell">{n.email || "—"}</td>
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground hidden md:table-cell">{n.phone || "—"}</td>
                       <td className="px-4 py-2.5 text-sm text-muted-foreground hidden md:table-cell">{n.department || "—"}</td>
                       <td className="px-4 py-2.5 hidden sm:table-cell">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
