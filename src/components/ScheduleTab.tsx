@@ -120,15 +120,56 @@ export function ScheduleTab() {
   };
 
   const handleGenerate = async () => {
+    // Pre-flight check: enough accepted nurses for ward demand?
+    const acceptedNurses = nurses.filter((n) => n.invite_status === "accepted");
+    const totalDemand = wardConfigs.reduce((sum, c) => sum + c.required_nurses, 0);
+    if (acceptedNurses.length < totalDemand) {
+      toast({
+        title: "Not enough nurses",
+        description: `You have ${acceptedNurses.length} accepted nurse(s) but your ward config requires ${totalDemand} per day (${wardConfigs.map((c) => `${c.shift_type}: ${c.required_nurses}`).join(", ")}). Accept more nurse invites or lower the ward requirements.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-schedule", {
         body: { year, month },
       });
       if (error) throw error;
+      if (data?.error) {
+        // Parse optimizer-level errors for actionable messages
+        const errMsg: string = data.error;
+        if (errMsg.includes("No feasible schedule")) {
+          toast({
+            title: "No feasible schedule",
+            description: "The optimizer couldn't satisfy all constraints. Try: reducing required nurses per shift, accepting more nurse invites, or removing some unavailability entries.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Generation failed", description: errMsg, variant: "destructive" });
+        }
+        return;
+      }
       setGeneratedOptions(data.options);
     } catch (err: any) {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      const msg = err?.message ?? String(err);
+      if (msg.includes("No feasible schedule") || msg.includes("422")) {
+        toast({
+          title: "No feasible schedule",
+          description: "The optimizer couldn't satisfy all constraints. Try: reducing required nurses per shift, accepting more nurse invites, or removing some unavailability entries.",
+          variant: "destructive",
+        });
+      } else if (msg.includes("SCHEDULER_API_URL")) {
+        toast({
+          title: "Scheduler not configured",
+          description: "The schedule optimizer service URL hasn't been set up yet. Contact your administrator.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Generation failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setGenerating(false);
     }
