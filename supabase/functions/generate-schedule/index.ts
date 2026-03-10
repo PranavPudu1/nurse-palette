@@ -6,190 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type ShiftType = "D" | "E" | "N" | "X";
-
-interface Nurse {
-  id: string;
-  name: string;
-  level: number;
-  department: string;
-}
-
-interface WardConfig {
-  shift_type: string;
-  required_nurses: number;
-  level_mix: Record<string, number>;
-}
-
-interface Preference {
-  nurse_id: string;
-  prefers_weekend: boolean;
-  prefers_night: boolean;
-  prefers_weekday: boolean;
-}
-
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
-}
-
-function dateKey(year: number, month: number, day: number): string {
-  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function generateSingleSchedule(
-  nurses: Nurse[],
-  year: number,
-  month: number,
-  wardConfigs: WardConfig[],
-  preferences: Preference[],
-  unavailability: { nurse_id: string; date: string }[],
-  exclusions: { nurse_id_1: string; nurse_id_2: string }[],
-  randomSeed: number
-): Record<string, Record<string, ShiftType>> {
-  const days = getDaysInMonth(year, month);
-  const schedule: Record<string, Record<string, ShiftType>> = {};
-  const unavailMap = new Set(unavailability.map((u) => `${u.nurse_id}:${u.date}`));
-  const prefMap = new Map(preferences.map((p) => [p.nurse_id, p]));
-
-  // Initialize all to X
-  for (const nurse of nurses) {
-    schedule[nurse.id] = {};
-    for (let d = 1; d <= days; d++) {
-      schedule[nurse.id][dateKey(year, month, d)] = "X";
-    }
-  }
-
-  // Simple seeded random
-  let seed = randomSeed;
-  const random = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed / 0x7fffffff;
-  };
-
-  // Shuffle helper
-  const shuffle = <T>(arr: T[]): T[] => {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  };
-
-  // Track consecutive working days and night state per nurse
-  const state: Record<string, { consecutive: number; nightPair: boolean; restDays: number }> = {};
-  for (const n of nurses) {
-    state[n.id] = { consecutive: 0, nightPair: false, restDays: 0 };
-  }
-
-  // For each day, assign shifts
-  for (let d = 1; d <= days; d++) {
-    const key = dateKey(year, month, d);
-    const dow = new Date(year, month, d).getDay();
-    const isWeekend = dow === 0 || dow === 6;
-
-    // Determine shift requirements
-    const shiftTypes: ShiftType[] = ["D", "E", "N"];
-
-    for (const shiftType of shiftTypes) {
-      const config = wardConfigs.find((c) => c.shift_type === shiftType);
-      const needed = config?.required_nurses ?? 2;
-
-      // Find available nurses for this shift
-      const available = shuffle(nurses).filter((n) => {
-        const s = state[n.id];
-        // Already assigned today
-        if (schedule[n.id][key] !== "X") return false;
-        // Unavailable
-        if (unavailMap.has(`${n.id}:${key}`)) return false;
-        // Must rest after night pair
-        if (s.restDays > 0) return false;
-        // Max 4 consecutive
-        if (s.consecutive >= 4) return false;
-        // Night shift: only assign if they can do 2 consecutive
-        if (shiftType === "N" && d < days) {
-          const nextKey = dateKey(year, month, d + 1);
-          if (unavailMap.has(`${n.id}:${nextKey}`)) return false;
-        }
-        return true;
-      });
-
-      // Score and sort by preference fit
-      const scored = available.map((n) => {
-        let score = random() * 10; // base randomness
-        const pref = prefMap.get(n.id);
-        if (pref) {
-          if (shiftType === "N" && pref.prefers_night) score += 20;
-          if (isWeekend && pref.prefers_weekend) score += 15;
-          if (!isWeekend && pref.prefers_weekday) score += 15;
-        }
-        // Higher level nurses get slight priority for night shifts
-        if (shiftType === "N") score += n.level * 2;
-        return { nurse: n, score };
-      });
-
-      scored.sort((a, b) => b.score - a.score);
-
-      // Assign top N nurses
-      let assigned = 0;
-      for (const { nurse } of scored) {
-        if (assigned >= needed) break;
-
-        // Check exclusions
-        const hasExclusion = exclusions.some((e) => {
-          const partnerId = e.nurse_id_1 === nurse.id ? e.nurse_id_2 : e.nurse_id_2 === nurse.id ? e.nurse_id_1 : null;
-          if (!partnerId) return false;
-          return schedule[partnerId]?.[key] === shiftType;
-        });
-        if (hasExclusion) continue;
-
-        schedule[nurse.id][key] = shiftType;
-        assigned++;
-
-        // Update state
-        const s = state[nurse.id];
-        s.consecutive++;
-
-        if (shiftType === "N") {
-          if (!s.nightPair) {
-            s.nightPair = true;
-          } else {
-            // Second night - will need 2 rest days
-            s.nightPair = false;
-            s.restDays = 2;
-          }
-        }
-      }
-    }
-
-    // Update rest days for all nurses
-    for (const nurse of nurses) {
-      const s = state[nurse.id];
-      if (schedule[nurse.id][key] === "X") {
-        if (s.restDays > 0) s.restDays--;
-        s.consecutive = 0;
-        s.nightPair = false;
-      }
-    }
-  }
-
-  // Second pass: assign night shifts in pairs
-  for (const nurse of nurses) {
-    for (let d = 1; d <= days; d++) {
-      const key = dateKey(year, month, d);
-      if (schedule[nurse.id][key] === "N") {
-        const nextDay = d + 1;
-        if (nextDay <= days) {
-          const nextKey = dateKey(year, month, nextDay);
-          if (schedule[nurse.id][nextKey] === "X" && !unavailMap.has(`${nurse.id}:${nextKey}`)) {
-            schedule[nurse.id][nextKey] = "N";
-          }
-        }
-      }
-    }
-  }
-
-  return schedule;
 }
 
 Deno.serve(async (req) => {
@@ -223,35 +41,94 @@ Deno.serve(async (req) => {
     }
 
     const { year, month } = await req.json();
+    const days = getDaysInMonth(year, month);
+    const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(days).padStart(2, "0")}`;
 
-    // Fetch all data
+    // Fetch all data from database
     const [nursesRes, configRes, prefsRes, unavailRes, exclRes] = await Promise.all([
       supabase.from("nurses").select("id, name, level, department").eq("invite_status", "accepted"),
       supabase.from("ward_shift_config").select("*"),
       supabase.from("nurse_preferences").select("*"),
       supabase.from("nurse_unavailability").select("nurse_id, date")
-        .gte("date", `${year}-${String(month + 1).padStart(2, "0")}-01`)
-        .lte("date", `${year}-${String(month + 1).padStart(2, "0")}-${String(getDaysInMonth(year, month)).padStart(2, "0")}`),
+        .gte("date", startDate)
+        .lte("date", endDate),
       supabase.from("nurse_exclusions").select("nurse_id_1, nurse_id_2"),
     ]);
 
-    const nurses = (nursesRes.data ?? []) as Nurse[];
-    const wardConfigs = (configRes.data ?? []) as WardConfig[];
-    const preferences = (prefsRes.data ?? []) as Preference[];
-    const unavailability = (unavailRes.data ?? []) as { nurse_id: string; date: string }[];
-    const exclusions = (exclRes.data ?? []) as { nurse_id_1: string; nurse_id_2: string }[];
+    const nurses = (nursesRes.data ?? []).map((n: any) => ({
+      id: n.id,
+      name: n.name,
+      level: n.level ?? 1,
+    }));
 
-    // Generate 3 options with different random seeds
-    const options = [];
-    for (let i = 0; i < 3; i++) {
-      const seed = Date.now() + i * 7919;
-      const schedule = generateSingleSchedule(
-        nurses, year, month, wardConfigs, preferences, unavailability, exclusions, seed
+    // Convert ward configs to the API format
+    const wardConfigs = (configRes.data ?? []).map((c: any) => {
+      const levelMix = (typeof c.level_mix === "object" && c.level_mix !== null) ? c.level_mix : {};
+      return {
+        shift_type: c.shift_type,
+        required_nurses: c.required_nurses ?? 2,
+        min_high: (levelMix as Record<string, number>)["2"] ?? 1,
+      };
+    });
+
+    const preferences = (prefsRes.data ?? []).map((p: any) => ({
+      nurse_id: p.nurse_id,
+      prefers_weekend: p.prefers_weekend ?? false,
+      prefers_night: p.prefers_night ?? false,
+      prefers_weekday: p.prefers_weekday ?? false,
+    }));
+
+    // Convert unavailability dates to day numbers
+    const unavailability = (unavailRes.data ?? []).map((u: any) => ({
+      nurse_id: u.nurse_id,
+      day: parseInt(u.date.split("-")[2], 10),
+    }));
+
+    const exclusions = (exclRes.data ?? []).map((e: any) => ({
+      nurse_id_1: e.nurse_id_1,
+      nurse_id_2: e.nurse_id_2,
+    }));
+
+    // Call the external Python optimizer
+    const SCHEDULER_API_URL = Deno.env.get("SCHEDULER_API_URL");
+    if (!SCHEDULER_API_URL) {
+      return new Response(
+        JSON.stringify({ error: "Scheduler API URL not configured. Please add the SCHEDULER_API_URL secret." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-      options.push({ id: `option-${i + 1}`, label: `Option ${i + 1}`, schedule });
     }
 
-    return new Response(JSON.stringify({ options }), {
+    const payload = {
+      year,
+      month,
+      days_in_month: days,
+      nurses,
+      ward_configs: wardConfigs,
+      preferences,
+      unavailability,
+      exclusions,
+      num_options: 3,
+      time_limit_seconds: 15.0,
+    };
+
+    const optimizerRes = await fetch(`${SCHEDULER_API_URL}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!optimizerRes.ok) {
+      const errBody = await optimizerRes.text();
+      return new Response(
+        JSON.stringify({ error: `Optimizer error (${optimizerRes.status}): ${errBody}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const result = await optimizerRes.json();
+
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
