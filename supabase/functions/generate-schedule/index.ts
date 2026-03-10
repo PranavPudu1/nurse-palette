@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
       unavailability,
       exclusions,
       num_options: 3,
-      time_limit_seconds: 15.0,
+      time_limit_seconds: 10.0,
     };
 
     const optimizerRes = await fetch(`${SCHEDULER_API_URL}/generate`, {
