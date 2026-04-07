@@ -191,12 +191,26 @@ def build_and_solve(req: ScheduleRequest, prev_solutions: list[dict] = None):
             if high_indices:
                 model.add(sum(x[(i, d, t)] for i in high_indices) >= min_high[d - 1][t_idx])
 
-    # 3. Night sliding window
+    # 3. Night shifts must come in consecutive pairs
+    # If a nurse works a night on day d, either day d-1 or day d+1 must also be night
     for i in nurse_range:
-        for start in range(1, D - hc.night_window_k + 2):
-            model.add(sum(x[(i, start + k, NGT_SLOT)] for k in range(hc.night_window_k)) <= hc.night_window_max)
+        for d in days:
+            if d == 1:
+                # First day: if night, then next day must also be night
+                model.add(x[(i, d, NGT_SLOT)] <= x[(i, d + 1, NGT_SLOT)])
+            elif d == D:
+                # Last day: if night, then previous day must also be night
+                model.add(x[(i, d, NGT_SLOT)] <= x[(i, d - 1, NGT_SLOT)])
+            else:
+                # Middle days: if night, at least one neighbor must be night
+                model.add(x[(i, d, NGT_SLOT)] <= x[(i, d - 1, NGT_SLOT)] + x[(i, d + 1, NGT_SLOT)])
 
-    # 4. Night block → days off after
+    # 3b. Limit night blocks to exactly 2 consecutive (no 3+ in a row)
+    for i in nurse_range:
+        for d in range(1, D - 1):
+            model.add(x[(i, d, NGT_SLOT)] + x[(i, d + 1, NGT_SLOT)] + x[(i, d + 2, NGT_SLOT)] <= 2)
+
+    # 4. Night block → days off after (2 mandatory rest days after a night pair)
     for i in nurse_range:
         for d in range(1, D):
             both = model.new_bool_var(f"bN_{i}_{d}")
