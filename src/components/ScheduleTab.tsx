@@ -24,6 +24,7 @@ export function ScheduleTab() {
   const [month, setMonth] = useState(now.getMonth());
   const [generating, setGenerating] = useState(false);
   const [generatedOptions, setGeneratedOptions] = useState<any[] | null>(null);
+  const [selectedNurseId, setSelectedNurseId] = useState<string | null>(null);
 
   // Local overrides for immediate UI feedback
   const [localOverrides, setLocalOverrides] = useState<Record<string, Record<string, ShiftType>>>({});
