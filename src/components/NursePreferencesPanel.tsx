@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNurses } from "@/hooks/useNurses";
+import { SoftConstraintsPanel } from "@/components/SoftConstraintsPanel";
 import { useNursePreferences, useUpsertPreferences, useNurseUnavailability, useAddUnavailability, useRemoveUnavailability } from "@/hooks/useNursePreferences";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Plus } from "lucide-react";
@@ -91,6 +92,8 @@ export function NursePreferencesPanel({ nurseId }: { nurseId: string }) {
           </div>
         )}
       </div>
+
+      <SoftConstraintsPanel nurseId={nurseId} />
     </div>
   );
 }
