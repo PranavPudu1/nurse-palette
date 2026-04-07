@@ -156,6 +156,7 @@ Deno.serve(async (req) => {
 
       const allNurseIds = [{ nurse_id: nurseId }, ...(extras || []).map((n) => ({ nurse_id: n.id }))];
       await seedDemoData(allNurseIds);
+      await seedPreferencesAndConstraints(nurseId, (extras || []).map((n) => ({ id: n.id, name: n.name })));
     }
 
     return new Response(JSON.stringify({ ok: true }), {
