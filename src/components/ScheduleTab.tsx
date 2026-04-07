@@ -270,10 +270,19 @@ export function ScheduleTab() {
             violations={violations}
             onCellClick={handleCellClick}
             onCellClear={handleCellClear}
+            onNurseNameClick={setSelectedNurseId}
           />
           <ViolationsPanel violations={violations} nurseNames={nurseNames} />
         </>
       )}
+
+      <NurseInfoDialog
+        nurse={selectedNurseId ? (() => {
+          const n = nurses.find((x) => x.id === selectedNurseId);
+          return n ? { id: n.id, name: n.name, level: n.level, email: n.email, phone: n.phone, department: n.department } : null;
+        })() : null}
+        onClose={() => setSelectedNurseId(null)}
+      />
     </div>
   );
 }
