@@ -258,16 +258,19 @@ export function ScheduleTab() {
       ) : nurses.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">Add nurses in the Nurses tab first.</div>
       ) : (
-        <ScheduleGrid
-          nurses={gridNurses}
-          schedule={schedule}
-          year={year}
-          month={month}
-          readOnly={false}
-          violations={violations}
-          onCellClick={handleCellClick}
-          onCellClear={handleCellClear}
-        />
+        <>
+          <ScheduleGrid
+            nurses={gridNurses}
+            schedule={schedule}
+            year={year}
+            month={month}
+            readOnly={false}
+            violations={violations}
+            onCellClick={handleCellClick}
+            onCellClear={handleCellClear}
+          />
+          <ViolationsPanel violations={violations} nurseNames={nurseNames} />
+        </>
       )}
     </div>
   );
