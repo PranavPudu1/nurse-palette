@@ -34,14 +34,15 @@ const CONSTRAINT_LABELS: Record<string, string> = {
 };
 
 export function NurseInfoDialog({ nurse, onClose }: Props) {
-  if (!nurse) return null;
-
   const now = new Date();
-  const { data: pref } = useNursePreferences(nurse.id);
-  const { data: unavails = [] } = useNurseUnavailability(nurse.id, now.getFullYear(), now.getMonth());
+  const nurseId = nurse?.id ?? "";
+  const { data: pref } = useNursePreferences(nurseId);
+  const { data: unavails = [] } = useNurseUnavailability(nurseId, now.getFullYear(), now.getMonth());
   const { data: softConstraints = [] } = useSoftConstraints();
 
-  const nurseSoftConstraints = softConstraints.filter((sc) => sc.nurse_id === nurse.id);
+  const nurseSoftConstraints = softConstraints.filter((sc) => sc.nurse_id === nurseId);
+
+  if (!nurse) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
