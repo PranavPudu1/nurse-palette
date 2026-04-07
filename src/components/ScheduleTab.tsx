@@ -11,6 +11,7 @@ import { ScheduleGrid } from "@/components/ScheduleGrid";
 import { ScheduleComparison } from "@/components/ScheduleComparison";
 import { MonthSelector } from "@/components/MonthSelector";
 import { Legend } from "@/components/Legend";
+import { ViolationsPanel } from "@/components/ViolationsPanel";
 import { Download, Wand2, Loader2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -93,6 +94,12 @@ export function ScheduleTab() {
     nurses.map((n) => ({ id: n.id, name: n.name })),
     [nurses]
   );
+
+  const nurseNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const n of nurses) map[n.id] = n.name;
+    return map;
+  }, [nurses]);
 
   const mappedConfigs: WardConfig[] = useMemo(() =>
     wardConfigs.map((c) => ({
@@ -251,16 +258,19 @@ export function ScheduleTab() {
       ) : nurses.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">Add nurses in the Nurses tab first.</div>
       ) : (
-        <ScheduleGrid
-          nurses={gridNurses}
-          schedule={schedule}
-          year={year}
-          month={month}
-          readOnly={false}
-          violations={violations}
-          onCellClick={handleCellClick}
-          onCellClear={handleCellClear}
-        />
+        <>
+          <ScheduleGrid
+            nurses={gridNurses}
+            schedule={schedule}
+            year={year}
+            month={month}
+            readOnly={false}
+            violations={violations}
+            onCellClick={handleCellClick}
+            onCellClear={handleCellClear}
+          />
+          <ViolationsPanel violations={violations} nurseNames={nurseNames} />
+        </>
       )}
     </div>
   );
