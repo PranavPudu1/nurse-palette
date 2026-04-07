@@ -1,0 +1,2 @@
+ALTER TABLE public.schedules DROP CONSTRAINT schedules_shift_type_check;
+ALTER TABLE public.schedules ADD CONSTRAINT schedules_shift_type_check CHECK (shift_type = ANY (ARRAY['D'::text, 'E'::text, 'N'::text, 'X'::text]));
