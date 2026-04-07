@@ -3,7 +3,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScheduleTab } from "@/components/ScheduleTab";
 import { NursesPanel } from "@/components/NursesPanel";
 import { WardConfigPanel } from "@/components/WardConfigPanel";
-import { CalendarDays, Users, LogOut, Settings } from "lucide-react";
+import { SchedulingRulesPanel } from "@/components/SchedulingRulesPanel";
+import { CalendarDays, Users, LogOut, Settings, Sliders } from "lucide-react";
 
 const Index = () => {
   const { user, signOut } = useAuth();
@@ -37,6 +38,9 @@ const Index = () => {
             <TabsTrigger value="ward-config" className="gap-1.5">
               <Settings className="w-4 h-4" /> Ward Config
             </TabsTrigger>
+            <TabsTrigger value="rules" className="gap-1.5">
+              <Sliders className="w-4 h-4" /> Scheduling Rules
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="schedule">
@@ -47,6 +51,9 @@ const Index = () => {
           </TabsContent>
           <TabsContent value="ward-config">
             <WardConfigPanel />
+          </TabsContent>
+          <TabsContent value="rules">
+            <SchedulingRulesPanel />
           </TabsContent>
         </Tabs>
       </main>

@@ -250,6 +250,90 @@ export type Database = {
           },
         ]
       }
+      scheduling_constraints: {
+        Row: {
+          consec_trigger: number
+          created_at: string
+          days_off_after_consec: number
+          days_off_after_night_block: number
+          department: string
+          id: string
+          max_consecutive_workdays: number
+          max_shifts_per_day: number
+          night_window_k: number
+          night_window_max: number
+          updated_at: string
+        }
+        Insert: {
+          consec_trigger?: number
+          created_at?: string
+          days_off_after_consec?: number
+          days_off_after_night_block?: number
+          department?: string
+          id?: string
+          max_consecutive_workdays?: number
+          max_shifts_per_day?: number
+          night_window_k?: number
+          night_window_max?: number
+          updated_at?: string
+        }
+        Update: {
+          consec_trigger?: number
+          created_at?: string
+          days_off_after_consec?: number
+          days_off_after_night_block?: number
+          department?: string
+          id?: string
+          max_consecutive_workdays?: number
+          max_shifts_per_day?: number
+          night_window_k?: number
+          night_window_max?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      soft_constraints: {
+        Row: {
+          constraint_type: string
+          created_at: string
+          department: string
+          id: string
+          nurse_id: string | null
+          params: Json
+        }
+        Insert: {
+          constraint_type: string
+          created_at?: string
+          department?: string
+          id?: string
+          nurse_id?: string | null
+          params?: Json
+        }
+        Update: {
+          constraint_type?: string
+          created_at?: string
+          department?: string
+          id?: string
+          nurse_id?: string | null
+          params?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "soft_constraints_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "soft_constraints_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ward_shift_config: {
         Row: {
           created_at: string
