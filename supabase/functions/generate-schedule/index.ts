@@ -22,7 +22,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify the user is a manager
     const token = authHeader?.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
@@ -45,8 +44,8 @@ Deno.serve(async (req) => {
     const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
     const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(days).padStart(2, "0")}`;
 
-    // Fetch all data from database
-    const [nursesRes, configRes, prefsRes, unavailRes, exclRes] = await Promise.all([
+    // Fetch all data
+    const [nursesRes, configRes, prefsRes, unavailRes, exclRes, softConRes, hardConRes] = await Promise.all([
       supabase.from("nurses").select("id, name, level, department").eq("invite_status", "accepted"),
       supabase.from("ward_shift_config").select("*"),
       supabase.from("nurse_preferences").select("*"),
@@ -54,6 +53,8 @@ Deno.serve(async (req) => {
         .gte("date", startDate)
         .lte("date", endDate),
       supabase.from("nurse_exclusions").select("nurse_id_1, nurse_id_2"),
+      supabase.from("soft_constraints").select("*"),
+      supabase.from("scheduling_constraints").select("*").eq("department", "General").single(),
     ]);
 
     const nurses = (nursesRes.data ?? []).map((n: any) => ({
@@ -62,7 +63,6 @@ Deno.serve(async (req) => {
       level: n.level ?? 1,
     }));
 
-    // Convert ward configs to the API format
     const wardConfigs = (configRes.data ?? []).map((c: any) => {
       const levelMix = (typeof c.level_mix === "object" && c.level_mix !== null) ? c.level_mix : {};
       return {
@@ -79,7 +79,6 @@ Deno.serve(async (req) => {
       prefers_weekday: p.prefers_weekday ?? false,
     }));
 
-    // Convert unavailability dates to day numbers
     const unavailability = (unavailRes.data ?? []).map((u: any) => ({
       nurse_id: u.nurse_id,
       day: parseInt(u.date.split("-")[2], 10),
@@ -90,11 +89,54 @@ Deno.serve(async (req) => {
       nurse_id_2: e.nurse_id_2,
     }));
 
-    // Call the external Python optimizer
+    // Map soft_constraints from DB
+    const softConstraints = (softConRes.data ?? []).map((sc: any) => ({
+      constraint_type: sc.constraint_type,
+      nurse_id: sc.nurse_id ?? null,
+      params: sc.params ?? {},
+    }));
+
+    // Also map nurse_preferences into soft constraints for backward compat
+    for (const p of preferences) {
+      if (p.prefers_weekend) {
+        softConstraints.push({
+          constraint_type: "prefer_weekend",
+          nurse_id: p.nurse_id,
+          params: { weight: 50 },
+        });
+      }
+      if (p.prefers_weekday) {
+        softConstraints.push({
+          constraint_type: "prefer_weekday",
+          nurse_id: p.nurse_id,
+          params: { weight: 40 },
+        });
+      }
+      if (p.prefers_night) {
+        softConstraints.push({
+          constraint_type: "prefer_night",
+          nurse_id: p.nurse_id,
+          params: { weight: 80 },
+        });
+      }
+    }
+
+    // Hard constraints from DB
+    const hc = hardConRes.data;
+    const hardConstraints = hc ? {
+      max_shifts_per_day: hc.max_shifts_per_day,
+      night_window_max: hc.night_window_max,
+      night_window_k: hc.night_window_k,
+      days_off_after_night_block: hc.days_off_after_night_block,
+      max_consecutive_workdays: hc.max_consecutive_workdays,
+      consec_trigger: hc.consec_trigger,
+      days_off_after_consec: hc.days_off_after_consec,
+    } : undefined;
+
     const SCHEDULER_API_URL = Deno.env.get("SCHEDULER_API_URL");
     if (!SCHEDULER_API_URL) {
       return new Response(
-        JSON.stringify({ error: "Scheduler API URL not configured. Please add the SCHEDULER_API_URL secret." }),
+        JSON.stringify({ error: "Scheduler API URL not configured." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -108,6 +150,8 @@ Deno.serve(async (req) => {
       preferences,
       unavailability,
       exclusions,
+      soft_constraints: softConstraints,
+      hard_constraints: hardConstraints,
       num_options: 3,
       time_limit_seconds: 10.0,
     };
