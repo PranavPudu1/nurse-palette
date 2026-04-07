@@ -56,6 +56,64 @@ Deno.serve(async (req) => {
     }
   };
 
+  const seedPreferencesAndConstraints = async (
+    nurseId: string,
+    extras: { id: string; name: string }[]
+  ) => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const pad = (n: number) => String(n).padStart(2, "0");
+
+    const sarah = extras.find((n) => n.name === "Sarah Johnson");
+    const emily = extras.find((n) => n.name === "Emily Davis");
+
+    // 1. Nurse preferences
+    const prefs = [
+      { nurse_id: nurseId, prefers_weekday: true, prefers_night: true, prefers_weekend: false },
+      ...(sarah ? [{ nurse_id: sarah.id, prefers_weekday: false, prefers_night: false, prefers_weekend: true }] : []),
+      ...(emily ? [{ nurse_id: emily.id, prefers_weekday: true, prefers_night: false, prefers_weekend: false }] : []),
+    ];
+    for (const p of prefs) {
+      await supabaseAdmin.from("nurse_preferences").upsert(p, { onConflict: "nurse_id" });
+    }
+
+    // 2. Unavailability
+    const unavail = [
+      { nurse_id: nurseId, date: `${year}-${pad(month + 1)}-10`, reason: "Vacation" },
+      { nurse_id: nurseId, date: `${year}-${pad(month + 1)}-11`, reason: "Vacation" },
+      ...(sarah ? [{ nurse_id: sarah.id, date: `${year}-${pad(month + 1)}-20`, reason: "Appointment" }] : []),
+    ];
+    for (const u of unavail) {
+      const { count } = await supabaseAdmin
+        .from("nurse_unavailability")
+        .select("id", { count: "exact", head: true })
+        .eq("nurse_id", u.nurse_id)
+        .eq("date", u.date);
+      if (!count || count === 0) {
+        await supabaseAdmin.from("nurse_unavailability").insert(u);
+      }
+    }
+
+    // 3. Soft constraints
+    const softRows = [
+      { nurse_id: nurseId, constraint_type: "avoid_night", department: "ICU", params: { weight: 80 } },
+      ...(sarah ? [{ nurse_id: sarah.id, constraint_type: "soft_unavail", department: "ICU", params: { day: 15, slot: 1, weight: 60 } }] : []),
+      ...(emily ? [
+        { nurse_id: emily.id, constraint_type: "prefer_night", department: "ICU", params: { weight: 70 } },
+        { nurse_id: emily.id, constraint_type: "soft_max_nights", department: "ICU", params: { max: 3, weight: 50 } },
+      ] : []),
+      { nurse_id: null as string | null, constraint_type: "level_night_penalty", department: "ICU", params: { penalties: { "1": 10, "2": 25, "3": 50 }, weight: 40 } },
+    ];
+    const { count: scCount } = await supabaseAdmin
+      .from("soft_constraints")
+      .select("id", { count: "exact", head: true })
+      .eq("department", "ICU");
+    if (!scCount || scCount === 0) {
+      await supabaseAdmin.from("soft_constraints").insert(softRows);
+    }
+  };
+
   try {
     // 1. Create manager
     const managerUser = await ensureUser(managerEmail);
