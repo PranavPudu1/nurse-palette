@@ -11,6 +11,7 @@ import { ScheduleGrid } from "@/components/ScheduleGrid";
 import { ScheduleComparison } from "@/components/ScheduleComparison";
 import { MonthSelector } from "@/components/MonthSelector";
 import { Legend } from "@/components/Legend";
+import { ViolationsPanel } from "@/components/ViolationsPanel";
 import { Download, Wand2, Loader2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
