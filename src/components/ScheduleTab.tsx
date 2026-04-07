@@ -12,6 +12,7 @@ import { ScheduleComparison } from "@/components/ScheduleComparison";
 import { MonthSelector } from "@/components/MonthSelector";
 import { Legend } from "@/components/Legend";
 import { ViolationsPanel } from "@/components/ViolationsPanel";
+import { NurseInfoDialog } from "@/components/NurseInfoDialog";
 import { Download, Wand2, Loader2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -23,6 +24,7 @@ export function ScheduleTab() {
   const [month, setMonth] = useState(now.getMonth());
   const [generating, setGenerating] = useState(false);
   const [generatedOptions, setGeneratedOptions] = useState<any[] | null>(null);
+  const [selectedNurseId, setSelectedNurseId] = useState<string | null>(null);
 
   // Local overrides for immediate UI feedback
   const [localOverrides, setLocalOverrides] = useState<Record<string, Record<string, ShiftType>>>({});
@@ -268,10 +270,19 @@ export function ScheduleTab() {
             violations={violations}
             onCellClick={handleCellClick}
             onCellClear={handleCellClear}
+            onNurseNameClick={setSelectedNurseId}
           />
           <ViolationsPanel violations={violations} nurseNames={nurseNames} />
         </>
       )}
+
+      <NurseInfoDialog
+        nurse={selectedNurseId ? (() => {
+          const n = nurses.find((x) => x.id === selectedNurseId);
+          return n ? { id: n.id, name: n.name, level: n.level, email: n.email, phone: n.phone, department: n.department } : null;
+        })() : null}
+        onClose={() => setSelectedNurseId(null)}
+      />
     </div>
   );
 }

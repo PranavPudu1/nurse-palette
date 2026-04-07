@@ -78,7 +78,7 @@ function validateNightShiftRule(
         date: dateKey(year, month, d),
         rule: "night-pair",
         severity: "error",
-        message: `${nurse.name}: Night shifts must be in pairs of 2 consecutive`,
+        message: `${nurse.name} has a single night shift on day ${d}. Night shifts must come in consecutive pairs (2 nights in a row). Fix: add a night shift on day ${d > 1 ? d - 1 : d + 1} or remove this one.`,
       });
     }
 
@@ -95,7 +95,7 @@ function validateNightShiftRule(
               date: dateKey(year, month, offDay),
               rule: "night-rest",
               severity: "error",
-              message: `${nurse.name}: Must have 2 days off after night shift pair`,
+              message: `${nurse.name} is working on day ${offDay} but needs rest. After a night pair (days ${d - 1}–${d}), the next 2 days must be off. Fix: clear the shift on day ${offDay}.`,
             });
           }
         }
@@ -126,7 +126,7 @@ function validateConsecutiveDaysRule(
           date: dateKey(year, month, d),
           rule: "max-consecutive",
           severity: "error",
-          message: `${nurse.name}: Max 4 consecutive working days exceeded`,
+          message: `${nurse.name} has been working ${consecutive} days straight (max is 4). Fix: give them a day off on or before day ${d}.`,
         });
       }
     } else {
@@ -141,7 +141,7 @@ function validateConsecutiveDaysRule(
               date: dateKey(year, month, d),
               rule: "rest-after-streak",
               severity: "warning",
-              message: `${nurse.name}: Recommend 2 days off after ${consecutive} consecutive days`,
+              message: `${nurse.name} worked ${consecutive} days in a row and only has 1 day off. Recommended: give 2 consecutive days off after a streak of 3+ workdays.`,
             });
           }
         }
@@ -178,7 +178,7 @@ function validateOvertimeRule(
           date: dateKey(year, month, d),
           rule: "overtime",
           severity: "warning",
-          message: `${nurse.name}: ${weekShifts} shifts this week (>40h overtime)`,
+          message: `${nurse.name} has ${weekShifts} shifts in the week starting day ${d} (max 5 before overtime). Fix: remove ${weekShifts - 5} shift(s) this week to stay within 40 hours.`,
         });
       }
     }
@@ -208,12 +208,14 @@ function validateStaffingRequirements(
       );
 
       if (assignedNurses.length < config.required_nurses) {
+        const shiftName = shiftType === "D" ? "Day" : shiftType === "E" ? "Evening" : "Night";
+        const shortage = config.required_nurses - assignedNurses.length;
         violations.push({
           nurseId: "__staffing__",
           date: key,
           rule: "understaffed",
           severity: "warning",
-          message: `${shiftType} shift on day ${d}: ${assignedNurses.length}/${config.required_nurses} nurses`,
+          message: `${shiftName} shift on day ${d} is short ${shortage} nurse(s) — has ${assignedNurses.length} of ${config.required_nurses} required. Fix: assign ${shortage} more nurse(s) to the ${shiftType} shift on this day.`,
         });
       }
     }
@@ -245,7 +247,7 @@ function validateExclusions(
           date: key,
           rule: "exclusion",
           severity: "error",
-          message: `${n1?.name ?? "?"} and ${n2?.name ?? "?"} should not work same shift`,
+          message: `${n1?.name ?? "?"} and ${n2?.name ?? "?"} are both on the ${s1} shift on day ${d}. These nurses should not work the same shift. Fix: move one of them to a different shift or day.`,
         });
       }
     }

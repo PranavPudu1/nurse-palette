@@ -17,6 +17,7 @@ interface ScheduleGridProps {
   onCellClear?: (nurseId: string, key: string) => void;
   onRemoveNurse?: (nurseId: string) => void;
   onAddNurse?: (name: string) => void;
+  onNurseNameClick?: (nurseId: string) => void;
 }
 
 const DAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -32,6 +33,7 @@ export function ScheduleGrid({
   onCellClear,
   onRemoveNurse,
   onAddNurse,
+  onNurseNameClick,
 }: ScheduleGridProps) {
   const days = getDaysInMonth(year, month);
   const [newName, setNewName] = useState("");
@@ -90,7 +92,12 @@ export function ScheduleGrid({
             {nurses.map((nurse) => (
               <tr key={nurse.id} className="group hover:bg-grid-hover/40">
                 <td className="sticky left-0 z-10 bg-card group-hover:bg-grid-hover/60 px-4 py-1.5 text-sm font-medium border-b border-r border-grid-border whitespace-nowrap">
-                  {nurse.name}
+                  <button
+                    onClick={() => onNurseNameClick?.(nurse.id)}
+                    className="text-left hover:text-primary hover:underline transition-colors cursor-pointer"
+                  >
+                    {nurse.name}
+                  </button>
                 </td>
                 {Array.from({ length: days }, (_, i) => {
                   const key = dateKey(year, month, i + 1);
