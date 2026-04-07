@@ -71,7 +71,7 @@ export function ViolationsPanel({ violations, nurseNames }: Props) {
                   )}
                   <div className="min-w-0">
                     <div className="font-medium text-foreground">
-                      {nurseNames[v.nurseId] || v.nurseId.slice(0, 8)}
+                      {v.nurseId === "__staffing__" ? "Staffing Gap" : (nurseNames[v.nurseId] || v.nurseId.slice(0, 8))}
                     </div>
                     <div className="text-muted-foreground text-xs mt-0.5">
                       {v.message}
