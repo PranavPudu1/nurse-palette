@@ -97,18 +97,18 @@ Deno.serve(async (req) => {
 
     // 3. Soft constraints
     const softRows = [
-      { nurse_id: nurseId, constraint_type: "avoid_night", department: "ICU", params: { weight: 80 } },
-      ...(sarah ? [{ nurse_id: sarah.id, constraint_type: "soft_unavail", department: "ICU", params: { day: 15, slot: 1, weight: 60 } }] : []),
+      { nurse_id: nurseId, constraint_type: "avoid_night", department: "General", params: { weight: 80 } },
+      ...(sarah ? [{ nurse_id: sarah.id, constraint_type: "soft_unavail", department: "General", params: { day: 15, slot: 1, weight: 60 } }] : []),
       ...(emily ? [
-        { nurse_id: emily.id, constraint_type: "prefer_night", department: "ICU", params: { weight: 70 } },
-        { nurse_id: emily.id, constraint_type: "soft_max_nights", department: "ICU", params: { max: 3, weight: 50 } },
+        { nurse_id: emily.id, constraint_type: "prefer_night", department: "General", params: { weight: 70 } },
+        { nurse_id: emily.id, constraint_type: "soft_max_nights", department: "General", params: { max: 3, weight: 50 } },
       ] : []),
-      { nurse_id: null as string | null, constraint_type: "level_night_penalty", department: "ICU", params: { penalties: { "1": 10, "2": 25, "3": 50 }, weight: 40 } },
+      { nurse_id: null as string | null, constraint_type: "level_night_penalty", department: "General", params: { penalties: { "1": 10, "2": 25, "3": 50 }, weight: 40 } },
     ];
     const { count: scCount } = await supabaseAdmin
       .from("soft_constraints")
       .select("id", { count: "exact", head: true })
-      .eq("department", "ICU");
+      .eq("department", "General");
     if (!scCount || scCount === 0) {
       await supabaseAdmin.from("soft_constraints").insert(softRows);
     }
