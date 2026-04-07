@@ -95,6 +95,12 @@ export function ScheduleTab() {
     [nurses]
   );
 
+  const nurseNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const n of nurses) map[n.id] = n.name;
+    return map;
+  }, [nurses]);
+
   const mappedConfigs: WardConfig[] = useMemo(() =>
     wardConfigs.map((c) => ({
       shift_type: c.shift_type,
