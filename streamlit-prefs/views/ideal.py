@@ -8,32 +8,33 @@ import streamlit as st
 
 from theme import (header, legend_html, shift_chip, BORDER, MUTED_FG, FG,
                    GRID_HEADER, ACCENT, CARD_BG, SURFACE_BG)
+from i18n import t
 
 YEAR, MONTH = 2026, 5
 DAYS = calendar.monthrange(YEAR, MONTH)[1]
-DAY_ABBR = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 SHIFT_OPTIONS = ["X", "D", "E", "N"]
-SHIFT_LONG = {"D": "Day", "E": "Evening", "N": "Night", "X": "Off"}
+WEEKDAY_KEYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def render() -> None:
+    weekday_labels = [t(f"day.weekday.{k}") for k in WEEKDAY_KEYS]
+
     if "ideal_rows" not in st.session_state:
         st.session_state.ideal_rows = pd.DataFrame(
             [["X"] * 7 for _ in range((DAYS // 7) + 1)],
-            columns=DAY_ABBR,
+            columns=weekday_labels,
         )
+    elif list(st.session_state.ideal_rows.columns) != weekday_labels:
+        # Language changed — re-label columns without losing data.
+        st.session_state.ideal_rows.columns = weekday_labels
 
-    header(
-        "Build your ideal month",
-        f"Sketch out what your perfect {calendar.month_name[MONTH]} {YEAR} would "
-        "look like. Click a cell to pick Day, Evening, Night, or Off. Use the "
-        "totals below to keep yourself honest.",
-    )
+    header(t("ideal.title"), t("ideal.subtitle"))
 
-    st.markdown(legend_html(), unsafe_allow_html=True)
+    st.markdown(legend_html(lambda c: t(f"shift.{c}")), unsafe_allow_html=True)
 
     st.markdown(
-        '<div class="np-section-title" style="margin-top:14px;">Edit by week</div>',
+        f'<div class="np-section-title" style="margin-top:14px;">'
+        f'{t("ideal.edit_label")}</div>',
         unsafe_allow_html=True,
     )
     edited = st.data_editor(
@@ -45,16 +46,14 @@ def render() -> None:
             day: st.column_config.SelectboxColumn(
                 day, options=SHIFT_OPTIONS, required=True, width="small",
             )
-            for day in DAY_ABBR
+            for day in weekday_labels
         },
-        key="ideal_editor",
+        key=f"ideal_editor_{len(weekday_labels)}",
     )
     st.session_state.ideal_rows = edited
 
     st.markdown(
-        f'<div class="np-muted" style="margin-top:6px;">'
-        f'Each row holds 7 days; the calendar preview pads to the real '
-        f'{calendar.month_name[MONTH]} layout.</div>',
+        f'<div class="np-muted" style="margin-top:6px;">{t("ideal.editor_hint")}</div>',
         unsafe_allow_html=True,
     )
 
@@ -70,13 +69,13 @@ def render() -> None:
         f'<div style="display:flex;align-items:center;gap:6px;'
         f'padding:6px 10px;background:{CARD_BG};border:1px solid {BORDER};'
         f'border-radius:8px;">{shift_chip(s, 22)}'
-        f'<span style="font-size:12px;color:{MUTED_FG};">{SHIFT_LONG[s]}</span>'
+        f'<span style="font-size:12px;color:{MUTED_FG};">{t(f"shift.{s}")}</span>'
         f'<span style="font-size:13px;font-weight:600;color:{FG};">{counts[s]}</span>'
         f'</div>'
         for s in SHIFT_OPTIONS
     )
     st.markdown(
-        f'<div class="np-section-title" style="margin-top:18px;">Totals</div>'
+        f'<div class="np-section-title" style="margin-top:18px;">{t("ideal.totals")}</div>'
         f'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">{chips}</div>',
         unsafe_allow_html=True,
     )
@@ -87,22 +86,21 @@ def render() -> None:
     for d in range(1, DAYS + 1):
         cur.append((d, flat[d - 1]))
         if len(cur) == 7:
-            weeks.append(cur)
-            cur = []
+            weeks.append(cur); cur = []
     if cur:
         while len(cur) < 7:
             cur.append((None, ""))
         weeks.append(cur)
 
     st.markdown(
-        '<div class="np-section-title">Calendar preview</div>',
+        f'<div class="np-section-title">{t("ideal.preview")}</div>',
         unsafe_allow_html=True,
     )
     head = "".join(
         f'<th style="padding:8px;font-size:11px;color:{MUTED_FG};font-weight:600;'
         f'background:{GRID_HEADER};border-bottom:1px solid {BORDER};text-align:center;">'
-        f'{d}</th>'
-        for d in DAY_ABBR
+        f'{lbl}</th>'
+        for lbl in weekday_labels
     )
     rows_html = ""
     for w in weeks:
@@ -137,13 +135,11 @@ def render() -> None:
 
     st.divider()
 
-    with st.expander("Add a note about why this is your ideal"):
+    with st.expander(t("ideal.note_label")):
         st.text_area(
-            "What about this month feels right?",
-            key="ideal_freeform",
-            label_visibility="collapsed",
-            placeholder="e.g. 'I love front-loading nights so the back half is "
-                        "family time.'",
+            t("ideal.note_label"),
+            key="ideal_freeform", label_visibility="collapsed",
+            placeholder=t("ideal.note_ph"),
         )
 
     payload = {
@@ -155,8 +151,8 @@ def render() -> None:
     }
 
     st.download_button(
-        "Download my ideal month (JSON)",
-        data=json.dumps(payload, indent=2),
+        t("ideal.download"),
+        data=json.dumps(payload, indent=2, ensure_ascii=False),
         file_name="ideal_schedule.json",
         mime="application/json",
     )

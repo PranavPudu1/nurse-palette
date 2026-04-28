@@ -1,125 +1,101 @@
-"""Trade-off sliders view."""
+"""Trade-off sliders view — minimalistic."""
 import json
 import streamlit as st
 
-from theme import header, FG, MUTED_FG, BORDER
+from theme import header, FG, MUTED_FG, BORDER, PRIMARY
+from i18n import t
 
+# Each entry: (key, min, max, default, suffix_key)
+# team_alignment_weight + overtime_appetite were dropped — they duplicate
+# Background Q7 (team importance) and Q4 (volume / stance) respectively.
 QUESTIONS = [
-    {
-        "key": "consec_nights_max",
-        "title": "Maximum nights in a row you'd accept",
-        "help": "Beyond this, fatigue / safety becomes a real concern.",
-        "min": 1, "max": 7, "default": 3, "suffix": "nights",
-    },
-    {
-        "key": "weekend_off_freq",
-        "title": "Minimum weekends off per month",
-        "help": "Out of ~4 weekends.",
-        "min": 0, "max": 4, "default": 2, "suffix": "weekends",
-    },
-    {
-        "key": "extra_nights_for_weekend",
-        "title": "Extra night shifts you'd trade for one extra weekend off",
-        "help": "How much more night work would you accept to free up a weekend?",
-        "min": 0, "max": 5, "default": 1, "suffix": "extra nights",
-    },
-    {
-        "key": "min_rest_hours",
-        "title": "Minimum rest between shifts (hours)",
-        "help": "Below this, you'd push back even if it's legally allowed.",
-        "min": 8, "max": 24, "default": 11, "suffix": "hours",
-    },
-    {
-        "key": "predictability_vs_choice",
-        "title": "Predictable rotation  ←→  Pick-your-own each month",
-        "help": "0 = give me a fixed cycle I can plan my life around. "
-                "100 = let me bid every month, even if it's irregular.",
-        "min": 0, "max": 100, "default": 50, "suffix": "",
-    },
-    {
-        "key": "team_alignment_weight",
-        "title": "How much do you want shifts aligned with a teammate?",
-        "help": "0 = doesn't matter; 100 = strongly prefer working with my partner.",
-        "min": 0, "max": 100, "default": 30, "suffix": "",
-    },
-    {
-        "key": "overtime_appetite",
-        "title": "Extra hours per month you'd voluntarily pick up",
-        "help": "Capacity for OT, not a commitment.",
-        "min": 0, "max": 60, "default": 8, "suffix": "hours",
-    },
+    ("consec_nights_max",          1,  7,  3, "nights"),
+    ("weekend_off_freq",           0,  4,  2, "weekends"),
+    ("extra_nights_for_weekend",   0,  5,  1, "extra"),
+    ("min_rest_hours",             8, 24, 11, "hours"),
+    ("predictability_vs_choice",   0,100, 50, ""),
 ]
+
+SUFFIX = {
+    "nights":   {"en": "nights",       "ko": "일"},
+    "weekends": {"en": "weekends",     "ko": "회"},
+    "extra":    {"en": "extra nights", "ko": "추가"},
+    "hours":    {"en": "hours",        "ko": "시간"},
+    "":         {"en": "",             "ko": ""},
+}
+
+
+def _suffix(key: str) -> str:
+    from i18n import get_lang
+    return SUFFIX.get(key, {}).get(get_lang(), SUFFIX.get(key, {}).get("en", ""))
 
 
 def render() -> None:
-    header(
-        "Trade-offs",
-        "Real schedules force compromises. Use the sliders to tell us where your "
-        "line is — there's no right answer, just yours.",
-    )
+    header(t("trade.title"), t("trade.subtitle"))
 
     results: dict[str, int] = {}
 
-    for q in QUESTIONS:
+    for q_key, q_min, q_max, q_default, suffix_key in QUESTIONS:
+        title = t(f"trade.q.{q_key}")
+        helptext = t(f"trade.q.{q_key}.h")
+
+        # Compact row — title + slider + readout pill.
         st.markdown(
-            f'<div class="np-card" style="margin-bottom:12px;">'
-            f'<div style="display:flex;justify-content:space-between;align-items:baseline;'
-            f'gap:18px;margin-bottom:6px;">'
-            f'<div style="font-size:14px;font-weight:600;color:{FG};">{q["title"]}</div>'
-            f'</div>'
-            f'<div class="np-muted" style="margin-bottom:8px;">{q["help"]}</div>',
+            f'<div style="font-size:14px;font-weight:600;color:{FG};margin:14px 0 2px;">'
+            f'{title}</div>'
+            f'<div class="np-muted" style="margin-bottom:6px;">{helptext}</div>',
             unsafe_allow_html=True,
         )
-        val = st.slider(
-            q["title"],
-            min_value=q["min"], max_value=q["max"], value=q["default"],
-            key=f"slider_{q['key']}",
-            label_visibility="collapsed",
-        )
-        suffix = f" {q['suffix']}" if q["suffix"] else ""
-        st.markdown(
-            f'<div style="text-align:right;font-size:13px;color:{MUTED_FG};'
-            f'margin-top:-6px;">'
-            f'Your answer: <span class="np-strong">{val}{suffix}</span>'
-            f'</div></div>',
-            unsafe_allow_html=True,
-        )
-        results[q["key"]] = val
+        slider_col, readout_col = st.columns([5, 1.2])
+        with slider_col:
+            val = st.slider(
+                title,
+                min_value=q_min, max_value=q_max, value=q_default,
+                key=f"slider_{q_key}",
+                label_visibility="collapsed",
+            )
+        with readout_col:
+            sfx = _suffix(suffix_key)
+            sfx_str = f" {sfx}" if sfx else ""
+            st.markdown(
+                f'<div style="margin-top:8px;text-align:center;'
+                f'background:#EAF1FA;color:{PRIMARY};border-radius:8px;'
+                f'padding:6px 0;font-weight:700;font-size:13px;">'
+                f'{val}{sfx_str}</div>',
+                unsafe_allow_html=True,
+            )
+        results[q_key] = val
 
     st.divider()
 
     st.markdown(
-        '<div class="np-section-title">Forced choices</div>',
+        f'<div class="np-section-title">{t("trade.forced")}</div>',
         unsafe_allow_html=True,
     )
 
     forced = {}
     forced["working_christmas"] = st.radio(
-        "If you had to work either Christmas Day or New Year's Eve, which?",
-        options=["Christmas Day", "New Year's Eve", "I'd swap with someone else"],
-        horizontal=True,
-        key="forced_holiday",
+        t("trade.f.holiday.q"),
+        options=[t("trade.f.holiday.a1"), t("trade.f.holiday.a2"), t("trade.f.holiday.a3")],
+        horizontal=True, key="forced_holiday",
     )
     forced["double_or_split"] = st.radio(
-        "Pick one: a 12-hour double-shift OR two split 6-hour shifts the same day.",
-        options=["12-hour double", "Two 6-hour splits", "Neither, refuse"],
-        horizontal=True,
-        key="forced_double",
+        t("trade.f.double.q"),
+        options=[t("trade.f.double.a1"), t("trade.f.double.a2"), t("trade.f.double.a3")],
+        horizontal=True, key="forced_double",
     )
     forced["short_notice"] = st.radio(
-        "How short is too short for a shift-change request?",
-        options=["< 24 hrs", "< 48 hrs", "< 1 week", "Anything is fine"],
-        horizontal=True,
-        key="forced_notice",
+        t("trade.f.notice.q"),
+        options=[t("trade.f.notice.a1"), t("trade.f.notice.a2"),
+                 t("trade.f.notice.a3"), t("trade.f.notice.a4")],
+        horizontal=True, key="forced_notice",
     )
 
-    with st.expander("Anything else we should know about your trade-offs?"):
+    with st.expander(t("trade.freeform_label")):
         st.text_area(
-            "Free text",
-            key="tradeoff_freeform",
-            label_visibility="collapsed",
-            placeholder="e.g. 'I can do back-to-back nights but not after a "
-                        "holiday weekend.'",
+            t("trade.freeform_label"),
+            key="tradeoff_freeform", label_visibility="collapsed",
+            placeholder=t("trade.freeform_ph"),
         )
 
     payload = {
@@ -129,8 +105,8 @@ def render() -> None:
     }
 
     st.download_button(
-        "Download my trade-offs (JSON)",
-        data=json.dumps(payload, indent=2),
+        t("trade.download"),
+        data=json.dumps(payload, indent=2, ensure_ascii=False),
         file_name="tradeoffs.json",
         mime="application/json",
     )

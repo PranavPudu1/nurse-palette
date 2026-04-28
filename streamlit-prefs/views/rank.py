@@ -1,20 +1,24 @@
-"""Feature ranking view."""
+"""Feature ranking view — compact, minimalistic."""
 import json
 import streamlit as st
 
-from theme import header, FG, MUTED_FG, BORDER, PRIMARY
+from theme import header, FG, MUTED_FG, BORDER, PRIMARY, CARD_BG
+from i18n import t
 
-DEFAULT_FEATURES = [
-    ("no_consec_nights", "No more than 2 nights in a row"),
-    ("weekends_off",     "At least every other weekend off"),
-    ("long_blocks",      "Long blocks of work + long blocks off (4-on / 4-off)"),
-    ("no_quick_turn",    "No 'quick turnarounds' (night → day next morning)"),
-    ("predictable",      "Predictable, repeating pattern week to week"),
-    ("self_pick_off",    "I can pick my off days each month"),
-    ("balanced_shifts",  "Even mix of day / evening / night"),
-    ("partner_aligned",  "Aligned with a coworker's schedule"),
+FEATURE_KEYS = [
+    "no_consec_nights",
+    "weekends_off",
+    "long_blocks",
+    "no_quick_turn",
+    "predictable",
+    "self_pick_off",
+    "balanced_shifts",
+    "partner_aligned",
 ]
-LABELS = dict(DEFAULT_FEATURES)
+
+
+def _label(key: str) -> str:
+    return t(f"rank.feat.{key}")
 
 
 def _move(idx: int, delta: int) -> None:
@@ -36,33 +40,32 @@ def _restore(key: str) -> None:
 
 def render() -> None:
     if "rank_order" not in st.session_state:
-        st.session_state.rank_order = [f[0] for f in DEFAULT_FEATURES]
+        st.session_state.rank_order = list(FEATURE_KEYS)
     if "rank_locked_out" not in st.session_state:
         st.session_state.rank_locked_out = []
 
-    header(
-        "Rank what matters most",
-        "Use ▲ / ▼ to reorder. #1 = the rule that affects your quality of life "
-        "the most. Move anything you genuinely don't care about to the bottom panel.",
-    )
+    header(t("rank.title"), t("rank.subtitle"))
 
     st.markdown(
-        '<div class="np-section-title">Ranked (most → least important)</div>',
+        f'<div class="np-section-title">{t("rank.ranked")}</div>',
         unsafe_allow_html=True,
     )
 
+    # Compact list — one row per item, 4 thin columns.
     for i, key in enumerate(st.session_state.rank_order):
-        badge_color = PRIMARY if i < 3 else "#8B96A6"
-        c1, c2, c3, c4 = st.columns([0.7, 7, 1.0, 1.6])
+        rank_color = PRIMARY if i < 3 else MUTED_FG
+        c1, c2, c3, c4 = st.columns([0.5, 6.5, 1.4, 0.6])
+
         with c1:
             st.markdown(
-                f'<div class="np-rank-badge" style="background:{badge_color};'
-                f'margin-top:6px;">{i + 1}</div>',
+                f'<div style="font-size:18px;font-weight:700;color:{rank_color};'
+                f'padding-top:10px;text-align:right;">{i + 1}</div>',
                 unsafe_allow_html=True,
             )
         with c2:
             st.markdown(
-                f'<div class="np-rank-row">{LABELS[key]}</div>',
+                f'<div style="padding:11px 0;font-size:14px;color:{FG};'
+                f'border-bottom:1px solid {BORDER};">{_label(key)}</div>',
                 unsafe_allow_html=True,
             )
         with c3:
@@ -75,53 +78,52 @@ def render() -> None:
                           disabled=(i == len(st.session_state.rank_order) - 1),
                           use_container_width=True)
         with c4:
-            st.button("Not important", key=f"drop_{key}",
-                      on_click=_drop, args=(key,),
-                      use_container_width=True)
+            st.button("✕", key=f"drop_{key}", on_click=_drop, args=(key,),
+                      help=t("rank.drop"), use_container_width=True)
 
     st.write("")
 
-    with st.expander(
-        f"Doesn't matter to me  ({len(st.session_state.rank_locked_out)})",
-        expanded=bool(st.session_state.rank_locked_out),
-    ):
+    n_dropped = len(st.session_state.rank_locked_out)
+    with st.expander(t("rank.dropped", n=n_dropped),
+                     expanded=bool(n_dropped)):
         if not st.session_state.rank_locked_out:
             st.markdown(
-                '<div class="np-muted">Move items here if you don\'t care about them.</div>',
+                f'<div class="np-muted">{t("rank.empty_drop")}</div>',
                 unsafe_allow_html=True,
             )
         for key in st.session_state.rank_locked_out:
-            c1, c2 = st.columns([5, 1])
+            c1, c2 = st.columns([6, 1])
             with c1:
                 st.markdown(
-                    f'<div class="np-rank-row-disabled">{LABELS[key]}</div>',
+                    f'<div style="padding:8px 0;font-size:13px;color:{MUTED_FG};">'
+                    f'{_label(key)}</div>',
                     unsafe_allow_html=True,
                 )
             with c2:
-                st.button("Restore", key=f"restore_{key}",
+                st.button(t("rank.restore"), key=f"restore_{key}",
                           on_click=_restore, args=(key,),
                           use_container_width=True)
 
     st.divider()
 
-    with st.expander("Anything else? (free text)"):
+    with st.expander(t("rank.freeform_label")):
         st.text_area(
-            "Other things that matter to you in a schedule",
+            t("rank.freeform_label"),
             key="rank_freeform", label_visibility="collapsed",
-            placeholder="e.g. I prefer to keep Wednesdays free for school pickup.",
+            placeholder=t("rank.freeform_ph"),
         )
 
     payload = {
-        "ranked": [{"rank": i + 1, "key": k, "label": LABELS[k]}
+        "ranked": [{"rank": i + 1, "key": k, "label": _label(k)}
                    for i, k in enumerate(st.session_state.rank_order)],
-        "not_important": [{"key": k, "label": LABELS[k]}
+        "not_important": [{"key": k, "label": _label(k)}
                           for k in st.session_state.rank_locked_out],
         "freeform": st.session_state.get("rank_freeform", ""),
     }
 
     st.download_button(
-        "Download my ranking (JSON)",
-        data=json.dumps(payload, indent=2),
+        t("rank.download"),
+        data=json.dumps(payload, indent=2, ensure_ascii=False),
         file_name="feature_ranking.json",
         mime="application/json",
     )

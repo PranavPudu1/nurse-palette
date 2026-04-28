@@ -104,6 +104,73 @@ def render_schedule_html(nurses: List[str], schedule: Dict[str, List[str]],
     )
 
 
+def render_single_calendar(year: int, month: int, shifts: List[str],
+                           title: str | None = None, badge: str | None = None,
+                           weekday_labels: List[str] | None = None) -> str:
+    """Render one nurse's month as a calendar grid (Mon-first)."""
+    days = calendar.monthrange(year, month)[1]
+    labels = weekday_labels or DAY_ABBR
+    first_dow = date(year, month, 1).weekday()
+
+    weeks: list[list[tuple[int | None, str]]] = []
+    cur: list[tuple[int | None, str]] = [(None, "")] * first_dow
+    for d in range(1, days + 1):
+        cur.append((d, shifts[d - 1] if d - 1 < len(shifts) else "X"))
+        if len(cur) == 7:
+            weeks.append(cur); cur = []
+    if cur:
+        while len(cur) < 7:
+            cur.append((None, ""))
+        weeks.append(cur)
+
+    head = "".join(
+        f'<th style="padding:8px;font-size:11px;color:{MUTED_FG};font-weight:600;'
+        f'background:{GRID_HEADER};border-bottom:1px solid {BORDER};text-align:center;">'
+        f'{lbl}</th>'
+        for lbl in labels
+    )
+    rows = ""
+    for w in weeks:
+        cells = ""
+        for i, (day_num, sh) in enumerate(w):
+            is_weekend = i >= 5
+            if day_num is None:
+                cells += (
+                    f'<td style="padding:8px;background:#F5F7FA;color:{MUTED_FG};'
+                    f'border:1px solid {BORDER};height:62px;"></td>'
+                )
+            else:
+                bg = ACCENT if is_weekend else CARD_BG
+                cells += (
+                    f'<td style="padding:6px;background:{bg};color:{FG};'
+                    f'border:1px solid {BORDER};vertical-align:top;height:62px;">'
+                    f'<div style="font-size:11px;color:{MUTED_FG};font-weight:500;'
+                    f'margin-bottom:2px;">{day_num}</div>'
+                    f'<div style="display:flex;justify-content:center;">'
+                    f'{shift_chip(sh, 26)}</div></td>'
+                )
+        rows += f'<tr>{cells}</tr>'
+
+    title_html = ""
+    if title or badge:
+        badge_html = (
+            f'<span class="np-pill" style="margin-left:8px;">{badge}</span>'
+            if badge else ""
+        )
+        title_html = (
+            f'<div style="font-weight:600;font-size:15px;color:{FG};margin-bottom:8px;'
+            f'display:flex;align-items:center;">{title or ""}{badge_html}</div>'
+        )
+
+    return (
+        f'<div>{title_html}'
+        f'<div style="border:1px solid {BORDER};border-radius:10px;overflow:hidden;'
+        f'background:{CARD_BG};">'
+        f'<table style="width:100%;border-collapse:collapse;color:{FG};">'
+        f'<thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div></div>'
+    )
+
+
 def schedule_summary(schedule: Dict[str, List[str]]) -> Dict[str, float]:
     total = sum(len(v) for v in schedule.values())
     counts = {s: 0 for s in SHIFTS}

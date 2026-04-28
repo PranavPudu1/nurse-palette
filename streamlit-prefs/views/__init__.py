@@ -1,3 +1,4 @@
-from . import welcome, compare, rank, ideal, tradeoffs, day_prefs
+from . import welcome, background, compare, rank, ideal, tradeoffs, day_prefs
 
-__all__ = ["welcome", "compare", "rank", "ideal", "tradeoffs", "day_prefs"]
+__all__ = ["welcome", "background", "compare", "rank", "ideal",
+           "tradeoffs", "day_prefs"]

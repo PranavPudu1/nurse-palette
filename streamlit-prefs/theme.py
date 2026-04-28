@@ -23,10 +23,19 @@ SURFACE_BG = "#FAFBFC"
 # Note: scoped to .np-* classes only — no broad selectors that bleed into widgets.
 GLOBAL_CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap');
 
 html, body {{
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-family: 'IBM Plex Sans', 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
+}}
+
+/* Korean glyphs only — DO NOT touch Material Symbols icon spans
+   (those share class prefixes with text widgets, so a broader selector
+   would replace icon ligatures with literal text like "arrow_right"). */
+.stMarkdown, .stText, .stTextInput input, .stTextArea textarea,
+.stSelectbox, .stRadio, .stSlider, .stDownloadButton, .stButton,
+section[data-testid="stSidebar"] {{
+    font-family: 'IBM Plex Sans', 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
 }}
 
 .block-container {{
@@ -208,13 +217,15 @@ def shift_chip(letter: str, size: int = 32) -> str:
     )
 
 
-def legend_html() -> str:
+def legend_html(label_fn=None) -> str:
+    """Render the four-shift legend. Pass label_fn(code) to override labels."""
     items = []
     for code, meta in SHIFT_COLORS.items():
+        label = label_fn(code) if label_fn else meta["label"]
         items.append(
             f'<div style="display:flex;align-items:center;gap:6px;color:{MUTED_FG};">'
             f'{shift_chip(code, 22)}'
-            f'<span style="font-size:12px;color:{MUTED_FG};">{meta["label"]}</span>'
+            f'<span style="font-size:12px;color:{MUTED_FG};">{label}</span>'
             f'</div>'
         )
     return (
