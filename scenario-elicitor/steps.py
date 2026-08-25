@@ -15,7 +15,8 @@ import os
 
 import streamlit as st
 
-from theme import header, section, FG, MUTED_FG, PRIMARY, ACCENT, BORDER
+from theme import (header, section, FG, MUTED_FG, PRIMARY, ACCENT, BORDER,
+                   SURFACE_BG)
 import export
 import llm
 import mailer
@@ -505,6 +506,25 @@ _TYPE_NAMES = {t["key"]: t["name"] for t in prompts.SOCRATIC_TYPES}
 MIN_ANSWER = 3          # characters, enough to reject whitespace and stray keys
 
 
+def _kept_text(canonical: str, label: str, **kw) -> str:
+    """A text box whose contents survive the widget being unmounted.
+
+    Streamlit garbage-collects widget state as soon as a widget stops being
+    rendered. The staged layouts move the rule box and the question boxes off
+    screen between stages, which silently emptied everything the person had
+    typed the moment they pressed Next.
+
+    So the value lives in a plain session key that nothing unmounts, and the
+    widget is seeded from it and writes back to it. Every reader elsewhere keeps
+    using the plain key and does not need to know a widget was involved.
+    """
+    ss = st.session_state
+    val = st.text_area(label, value=ss.get(canonical, ""), key=f"w_{canonical}",
+                       **kw)
+    ss[canonical] = val
+    return val
+
+
 def _answered(key: str) -> bool:
     return len((st.session_state.get(key) or "").strip()) >= MIN_ANSWER
 
@@ -529,9 +549,9 @@ def _render_one_question(key: str, label: str, text: str, info_key: str) -> None
         f'<span class="np-pill">{label}</span>{provenance.icon(info_key)}{mark}'
         f'<div class="np-sub" style="margin-top:6px;">{text}</div></div>',
         unsafe_allow_html=True)
-    st.text_area("Your thoughts", key=key, height=90,
-                 placeholder="a sentence or two is plenty",
-                 label_visibility="collapsed")
+    _kept_text(key, "Your thoughts", height=90,
+               placeholder="a sentence or two is plenty",
+               label_visibility="collapsed")
 
 
 def _question_slots(idx: int, slot: str) -> list[tuple[str, str]]:
@@ -841,30 +861,6 @@ def _unincorporated(idx: int, draft: str) -> list[dict]:
     return out
 
 
-def _render_conversation_pane(cases: list[dict]) -> None:
-    """The theme's three cases, as three conversations in tabs.
-
-    Tabs rather than a stack so three cases cost one case's height, and a fixed
-    height so a long reply cannot push the rubric off the screen. Baseline
-    replies are no longer length-capped, so without this the column heights
-    diverge badly.
-    """
-    # The icon lives on this heading rather than on each card. Inside the pane
-    # it would open into a fixed-height scrolling box and be cut off, which is
-    # exactly the clipping this layout has to avoid.
-    st.markdown(f'<div class="np-section-title">The conversations'
-                f'{provenance.icon("case")}</div>', unsafe_allow_html=True)
-    st.caption("What these look like today, before you have told the AI "
-               "anything.")
-    if not cases:
-        st.info("No cases for this theme yet.")
-        return
-    tabs = st.tabs([f"Case {i + 1}" for i in range(len(cases))])
-    for tab, s in zip(tabs, cases):
-        with tab:
-            with st.container(height=_PANE_H, border=False):
-                st.markdown(_situation_card(s), unsafe_allow_html=True)
-                _render_example_chat(s)
 
 
 def _render_score_bar(name: str, level: int | None, weight: int) -> str:
@@ -1027,13 +1023,283 @@ def _save_theme_rule(theme: str, cases: list[dict]) -> None:
     ss.sb_tcidx = 0
 
 
+# ---------------------------------------------------------------------------
+# The workspace, in four layouts
+# ---------------------------------------------------------------------------
+# Four prototypes exist so Min can be shown the options rather than described
+# them. They are a review affordance, not a feature: the switcher only appears
+# in test sessions.
+#
+# All four compose the same primitives below and write the same session keys, so
+# switching mid-theme cannot lose work and no layout can pass a test the others
+# fail. What differs is only how each earns space, because the hard constraint
+# is that a theme must fit one viewport without the page scrolling, and the
+# case, its conversation, the questions, the rule box and the rubric do not fit
+# together at any honest font size.
+
+LAYOUTS = {
+    "A": ("Staged", "One step at a time under a pinned case."),
+    "B": ("Workbench", "Everything visible at once, in three columns."),
+    "C": ("Split", "Case holds the left half; work steps down the right."),
+    "D": ("Conversation", "The chat is the page; work docks beneath it."),
+}
+_DEFAULT_LAYOUT = "A"
+
+
+def _layout() -> str:
+    got = st.session_state.get("sb_layout")
+    return got if got in LAYOUTS else _DEFAULT_LAYOUT
+
+
+def _render_layout_switcher() -> None:
+    """Visible only in test sessions. A participant must never see this."""
+    if not st.session_state.get("resp_test"):
+        return
+    keys = list(LAYOUTS)
+    st.radio("Layout prototype", keys, key="sb_layout", horizontal=True,
+             index=keys.index(_layout()),
+             format_func=lambda k: f"{k} · {LAYOUTS[k][0]}")
+    st.caption(LAYOUTS[_layout()][1])
+
+
+# ---- the pieces every layout is built from --------------------------------
+
+def _ui_cases(cases: list[dict], height: int) -> None:
+    """The theme's cases as conversations, in tabs, in a fixed-height pane."""
+    st.markdown(f'<div class="np-section-title">The conversations'
+                f'{provenance.icon("case")}</div>', unsafe_allow_html=True)
+    if not cases:
+        st.info("No cases for this theme yet.")
+        return
+    tabs = st.tabs([f"Case {i + 1}" for i in range(len(cases))])
+    for tab, sc in zip(tabs, cases):
+        with tab:
+            with st.container(height=height, border=False):
+                st.markdown(_situation_card(sc), unsafe_allow_html=True)
+                _render_example_chat(sc)
+
+
+def _ui_before(idx: int, scenario: dict) -> None:
+    """The questions asked before anything is written. All required."""
+    ss = st.session_state
+    if f"sb_rqb_{idx}" not in ss:
+        with st.spinner("Preparing a couple of questions to consider..."):
+            rq = llm.reflect_before(ss.sb_agent, _does(), ss.sb_audience, scenario)
+        ss[f"sb_rqb_{idx}"] = rq.get("questions") or []
+        store.log_event(_rid(), "themes", "reflect_before",
+                        {"theme": ss.sb_theme, "questions": ss[f"sb_rqb_{idx}"]})
+    section("Before you answer")
+    st.caption("There is no right answer. What you write here is used when your "
+               "rule is checked, so answer all of them before you write.")
+    probe = (scenario.get("probe") or "").strip()
+    if probe:
+        _render_one_question(f"sb_rap_{idx}", "As you write, consider", probe,
+                             "probe")
+    _render_reflection(idx, "b", ss[f"sb_rqb_{idx}"])
+
+
+def _ui_after(idx: int) -> None:
+    """The questions asked about what was actually written. Only after a check."""
+    ss = st.session_state
+    if not ss.get(f"sb_rqa_{idx}"):
+        return
+    section("Now that you have written it")
+    st.caption("These ask about your reasoning, not whether the rule is good.")
+    _render_reflection(idx, "a", ss[f"sb_rqa_{idx}"])
+
+
+def _ui_rule(idx: int, height: int = 200) -> None:
+    """The rule box and the two things you can do with it."""
+    ss = st.session_state
+    section("Your rule for this theme")
+    draft = _kept_text(
+        f"sb_answer_{idx}", "Your rule", height=height,
+        label_visibility="collapsed",
+        placeholder="One rule that should hold across all three of these "
+                    "conversations. Say what the AI should do, what it should "
+                    "not do, and how to handle the hard part.").strip()
+    b1, b2 = st.columns(2, gap="small")
+    b1.button("Check my answer", key=f"sb_check_{idx}", use_container_width=True,
+              type="primary", disabled=not draft, on_click=_flag,
+              args=("_sb_check",))
+    b2.button("Try it on a case", key=f"sb_test_{idx}", use_container_width=True,
+              type="secondary", disabled=not draft,
+              help="Answers the first conversation again, following your rule.",
+              on_click=_request_test, args=(idx,))
+
+
+def _ui_tried(idx: int, cases: list[dict], height: int = 260) -> None:
+    ss = st.session_state
+    if not (ss.get(f"sb_chat_{idx}") or {}).get("turns") or not cases:
+        return
+    section("Your rule, tried out")
+    with st.container(height=height, border=False):
+        _render_scenario_chat(idx, cases[0])
+
+
+def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
+    ss = st.session_state
+    missing = _unanswered(idx, "b")
+    no_rule = not (ss.get(f"sb_answer_{idx}") or "").strip()
+    st.button("Save this rule and test it", key=f"sb_save_{idx}", type="primary",
+              use_container_width=True, disabled=bool(missing) or no_rule,
+              on_click=_save_theme_rule, args=(theme, cases))
+    if missing:
+        st.caption("Answer these before saving: " + ", ".join(missing) + ".")
+    elif no_rule:
+        st.caption("Write your rule to continue.")
+
+
+# ---- stage handling, for the layouts that step ----------------------------
+
+_STAGES = ("Consider", "Write", "Sharpen")
+
+
+def _stage(idx: int) -> int:
+    return int(st.session_state.get(f"sb_stage_{idx}", 0))
+
+
+def _set_stage(idx: int, n: int) -> None:
+    st.session_state[f"sb_stage_{idx}"] = max(0, min(len(_STAGES) - 1, n))
+
+
+def _render_stage_rail(idx: int) -> None:
+    cur = _stage(idx)
+    cells = "".join(
+        f'<span class="np-pill" style="margin-right:6px;'
+        f'background:{PRIMARY if k == cur else SURFACE_BG};'
+        f'color:{"#fff" if k == cur else MUTED_FG};">{k + 1}. {name}</span>'
+        for k, name in enumerate(_STAGES))
+    st.markdown(f'<div style="margin-bottom:8px;">{cells}</div>',
+                unsafe_allow_html=True)
+
+
+def _render_stage_nav(idx: int) -> None:
+    """Forward is gated on the questions; back never is."""
+    cur = _stage(idx)
+    missing = _unanswered(idx, "b") if cur == 0 else []
+    c1, c2 = st.columns([1, 1], gap="small")
+    if cur > 0:
+        c1.button("Back", key=f"sb_stback_{idx}_{cur}", use_container_width=True,
+                  type="secondary", on_click=_set_stage, args=(idx, cur - 1))
+    if cur < len(_STAGES) - 1:
+        c2.button(f"Next: {_STAGES[cur + 1]}", key=f"sb_stnext_{idx}_{cur}",
+                  use_container_width=True, type="primary",
+                  disabled=bool(missing),
+                  on_click=_set_stage, args=(idx, cur + 1))
+    if missing:
+        st.caption("Answer these first: " + ", ".join(missing) + ".")
+
+
+# ---- the four layouts ------------------------------------------------------
+
+def _layout_a(idx, theme, cases, scenario) -> None:
+    """Staged: the case is pinned and one working block sits under it."""
+    _ui_cases(cases, 250)
+    st.divider()
+    _render_stage_rail(idx)
+    cur = _stage(idx)
+    if cur == 0:
+        _ui_before(idx, scenario)
+    elif cur == 1:
+        left, right = st.columns([1.3, 1], gap="medium")
+        with left:
+            _ui_rule(idx, height=220)
+        with right:
+            _render_scores(st.session_state.get(f"sb_fb_{idx}"),
+                           st.session_state.sb_rubric, idx,
+                           (st.session_state.get(f"sb_answer_{idx}") or "").strip())
+    else:
+        left, right = st.columns([1, 1], gap="medium")
+        with left:
+            _ui_after(idx)
+            _ui_tried(idx, cases, 220)
+        with right:
+            _render_version_compare(idx, scenario,
+                                    (st.session_state.get(f"sb_answer_{idx}")
+                                     or "").strip())
+    _render_stage_nav(idx)
+    if cur == len(_STAGES) - 1:
+        _ui_save(theme, cases, idx)
+
+
+def _layout_b(idx, theme, cases, scenario) -> None:
+    """Workbench: everything at once, three columns, nothing hidden."""
+    ss = st.session_state
+    draft = (ss.get(f"sb_answer_{idx}") or "").strip()
+    scores, middle, asks = st.columns([1, 1.35, 1], gap="medium")
+    with scores:
+        _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
+    with middle:
+        _ui_cases(cases, 240)
+        _ui_rule(idx, height=170)
+    with asks:
+        with st.container(height=520, border=False):
+            _ui_before(idx, scenario)
+            _ui_after(idx)
+    _ui_save(theme, cases, idx)
+
+
+def _layout_c(idx, theme, cases, scenario) -> None:
+    """Split: the case owns the left half and never changes."""
+    ss = st.session_state
+    left, right = st.columns([1, 1.4], gap="medium")
+    with left:
+        _ui_cases(cases, 560)
+    with right:
+        _render_stage_rail(idx)
+        cur = _stage(idx)
+        with st.container(height=470, border=False):
+            if cur == 0:
+                _ui_before(idx, scenario)
+            elif cur == 1:
+                _ui_rule(idx, height=200)
+                _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
+                               (ss.get(f"sb_answer_{idx}") or "").strip())
+            else:
+                _ui_after(idx)
+                _render_version_compare(idx, scenario,
+                                        (ss.get(f"sb_answer_{idx}") or "").strip())
+                _ui_tried(idx, cases, 200)
+        _render_stage_nav(idx)
+        if cur == len(_STAGES) - 1:
+            _ui_save(theme, cases, idx)
+
+
+def _layout_d(idx, theme, cases, scenario) -> None:
+    """Conversation-led: the chat is the page, the work docks beneath it."""
+    ss = st.session_state
+    _ui_cases(cases, 330)
+    st.divider()
+    t_ask, t_rule, t_score, t_ver = st.tabs(
+        ["Questions", "Your rule", "Score", "Versions"])
+    with t_ask:
+        with st.container(height=300, border=False):
+            _ui_before(idx, scenario)
+            _ui_after(idx)
+    with t_rule:
+        with st.container(height=300, border=False):
+            _ui_rule(idx, height=180)
+            _ui_tried(idx, cases, 200)
+    with t_score:
+        with st.container(height=300, border=False):
+            _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
+                           (ss.get(f"sb_answer_{idx}") or "").strip())
+    with t_ver:
+        with st.container(height=300, border=False):
+            _render_version_compare(idx, scenario,
+                                    (ss.get(f"sb_answer_{idx}") or "").strip())
+    _ui_save(theme, cases, idx)
+
+
+_LAYOUT_FNS = {"A": _layout_a, "B": _layout_b, "C": _layout_c, "D": _layout_d}
+
+
 def _render_theme_workspace() -> None:
     ss = st.session_state
     theme = ss.sb_theme
     meta = prompts.theme_by_name(theme) or {"name": theme, "blurb": ""}
     cases = _ensure_theme_cases(theme)
-    # One rule per theme, so the per-case session keys all hang off a stable
-    # index for this theme rather than off a position in a flat case list.
     idx = _theme_index(theme)
     ss.sb_idx = idx
     scenario = cases[0] if cases else {"id": -1, "title": theme, "situation": "",
@@ -1048,97 +1314,8 @@ def _render_theme_workspace() -> None:
            f"{meta['blurb']}")
     st.button("Back to the themes", key="sb_back_themes", type="secondary",
               on_click=_close_theme)
-
-    # Three columns, so nothing that bears on the rule is off screen while it is
-    # being written: the score on the left, the cases and the writing box in the
-    # middle, the questions on the right. The middle is widest because it holds
-    # both the conversations and the box, and it is the column being worked in.
-    scores, middle, asks = st.columns([1, 1.35, 1], gap="medium")
-    draft_now = (ss.get(f"sb_answer_{idx}") or "").strip()
-    with scores:
-        _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft_now)
-    with middle:
-        _render_conversation_pane(cases)
-        st.write("")
-        _render_rule_column(idx, scenario, cases)
-    with asks:
-        _render_ask_column(idx, scenario)
-
-    st.write("")
-    _render_version_compare(idx, scenario, (ss.get(f"sb_answer_{idx}") or "").strip())
-    _render_rubric_editor()
-
-    st.write("")
-    missing = _unanswered(idx, "b")
-    no_rule = not (ss.get(f"sb_answer_{idx}") or "").strip()
-    st.button("Save this rule and test it", key=f"sb_save_{idx}", type="primary",
-              disabled=bool(missing) or no_rule,
-              on_click=_save_theme_rule, args=(theme, cases))
-    if missing:
-        st.caption("Answer these before saving: " + ", ".join(missing) + ".")
-    elif no_rule:
-        st.caption("Write your rule to continue.")
-
-
-def _render_rule_column(idx: int, scenario: dict, cases: list[dict]) -> None:
-    ss = st.session_state
-    section("Your rule for this theme")
-    ss.setdefault(f"sb_answer_{idx}", "")
-    st.text_area("Your rule", key=f"sb_answer_{idx}", height=170,
-                 label_visibility="collapsed",
-                 placeholder="One rule that should hold across all three of "
-                             "these conversations. Say what the AI should do, "
-                             "what it should not do, and how to handle the hard "
-                             "part.")
-    draft_now = (ss.get(f"sb_answer_{idx}") or "").strip()
-    b1, b2 = st.columns([1, 1], gap="small")
-    b1.button("Check my answer", key=f"sb_check_{idx}", use_container_width=True,
-              type="primary", disabled=not draft_now,
-              on_click=_flag, args=("_sb_check",))
-    b2.button("Try it on a case", key=f"sb_test_{idx}", use_container_width=True,
-              type="secondary", disabled=not draft_now,
-              help="Answers the first conversation again, following your rule.",
-              on_click=_request_test, args=(idx,))
-    if (ss.get(f"sb_chat_{idx}") or {}).get("turns") and cases:
-        st.write("")
-        section("Your rule, tried out")
-        with st.container(height=280, border=False):
-            _render_scenario_chat(idx, cases[0])
-
-
-def _render_ask_column(idx: int, scenario: dict) -> None:
-    """Everything that asks the person something, in one column.
-
-    The before-you-write and after-you-check questions used to sit in different
-    places on the page, which meant that once the rubric came back the earlier
-    questions had scrolled away. They are the same activity and they now share a
-    column, so the whole of what was asked stays visible next to the answer.
-    """
-    ss = st.session_state
-    if f"sb_rqb_{idx}" not in ss:
-        with st.spinner("Preparing a couple of questions to consider..."):
-            rq = llm.reflect_before(ss.sb_agent, _does(), ss.sb_audience, scenario)
-        ss[f"sb_rqb_{idx}"] = rq.get("questions") or []
-        store.log_event(_rid(), "themes", "reflect_before",
-                        {"theme": ss.sb_theme, "questions": ss[f"sb_rqb_{idx}"]})
-
-    probe = (scenario.get("probe") or "").strip()
-    if probe or ss.get(f"sb_rqb_{idx}"):
-        section("Before you answer")
-        st.caption("There is no right answer. What you write here is used when "
-                   "your rule is checked, so answer all of them before you "
-                   "write.")
-        if probe:
-            _render_one_question(f"sb_rap_{idx}", "As you write, consider",
-                                 probe, "probe")
-        _render_reflection(idx, "b", ss[f"sb_rqb_{idx}"])
-
-    if ss.get(f"sb_rqa_{idx}"):
-        st.write("")
-        section("Now that you have written it")
-        st.caption("These ask about your reasoning, not whether the rule is "
-                   "good. The score on the left does that.")
-        _render_reflection(idx, "a", ss[f"sb_rqa_{idx}"])
+    _render_layout_switcher()
+    _LAYOUT_FNS[_layout()](idx, theme, cases, scenario)
 
 
 def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> None:
@@ -1422,8 +1599,8 @@ def _render_theme_test() -> None:
         section("Change your rule, if it got this wrong")
         st.caption("This is your rule, not a suggestion from us. Edit it and "
                    "the next comparisons use what you write here.")
-        st.text_area("Your rule", key=f"sb_answer_{idx}", height=150,
-                     label_visibility="collapsed")
+        _kept_text(f"sb_answer_{idx}", "Your rule", height=150,
+                   label_visibility="collapsed")
         st.button("Save and continue", type="primary",
                   key=f"sb_tafter_{cmp['id']}", on_click=_theme_after_reveal,
                   args=(cmp, i))

@@ -19,7 +19,7 @@ testing an AI, seeding a benchmark across domains, or personalizing an agent.
    cases** the agent would face, grouped into a few themes, to surface ones you
    had not considered. Each case follows the paper's structure (the case, what is
    at stake, things to weigh, how it plays out, who it affects). Drill into a
-   theme with "Surface more", regenerate, or add your own.
+   theme; three cases are written for it when you open it.
 4. **Respond** - for each case you **author the ideal behavior**, in your own
    words, as a short co-writing loop: you draft, hit **Check** to get per-
    criterion rubric feedback (a level 1-4 per criterion with Why and
@@ -67,7 +67,7 @@ testing an AI, seeding a benchmark across domains, or personalizing an agent.
   legal-opinion elicitation paper Min shared; the person authors the conclusion.
 - **Farsight reference.** The cases step emulates Farsight's fan-out (Wang et al.,
   CHI 2024): a diverse, themed set that surfaces non-obvious cases, with per-theme
-  "Surface more" and an adaptive GATE round that probes ambiguous answers.
+  an adaptive round that probes where authored rules are ambiguous.
 - **Runs with no key.** Every model call degrades to a deterministic offline
   mock, so the whole flow is clickable without an API key.
 
