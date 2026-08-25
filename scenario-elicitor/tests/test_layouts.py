@@ -26,6 +26,15 @@ def click(at, label):
     return False
 
 
+SEEN_RUBRIC = {}
+
+
+def _note_rubric(at, layout):
+    labels = [e.label for e in at.get("expander")]
+    if any("rubric" in (l or "").lower() for l in labels):
+        SEEN_RUBRIC[layout] = True
+
+
 def run_theme(layout):
     at = AppTest.from_file(APP + "/app.py", default_timeout=300)
     at.run()
@@ -44,6 +53,7 @@ def run_theme(layout):
 
     # walk whatever stages this layout has, answering and writing as they appear
     for _ in range(6):
+        _note_rubric(at, layout)
         for w in list(at.text_area):
             if w.key and w.key.startswith((f"w_sb_rap_{idx}", f"w_sb_rab_{idx}_")):
                 if not (str(w.value or "")).strip():
@@ -69,7 +79,7 @@ def run_theme(layout):
 
 print("=== each layout completes a theme ===")
 results = {}
-for layout in ("A", "B", "C", "D"):
+for layout in ("A", "B", "C", "D", "O"):
     at, ss, idx, ok = run_theme(layout)
     check(ok, f"{layout}: saved the rule")
     check(not at.exception, f"{layout}: no exception ({at.exception})")
@@ -81,9 +91,17 @@ for layout in ("A", "B", "C", "D"):
     check(len(ans["reflection"]) >= 1, f"{layout}: reflection captured "
                                        f"({len(ans['reflection'])})")
 
-print("=== all four produce the same state ===")
+print("=== the rubric editor is reachable in every layout ===")
+# It is anchored to the score display. A refactor already orphaned it once,
+# defined but called from nowhere, so this checks it appears somewhere during a
+# normal walk rather than at one fixed moment: layouts that stage the work do
+# not show the score on every stage, and should not.
+for layout in ("A", "B", "C", "D", "O"):
+    check(SEEN_RUBRIC.get(layout), f"{layout}: the rubric editor was on screen")
+
+print("=== all five produce the same state ===")
 base = results["A"]
-for layout in ("B", "C", "D"):
+for layout in ("B", "C", "D", "O"):
     check(results[layout] == base,
           f"{layout} matches A ({results[layout]} vs {base})")
 

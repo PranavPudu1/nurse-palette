@@ -55,7 +55,8 @@ print("=== the baseline is a product default, uncapped ===")
 base = P.agent_reply_messages("A", "d", "aud", {"situation": "s"}, None, [])[0]
 check("two to four sentences" not in base["content"], "no length cap")
 check("child-appropriate mode" in base["content"], "child-safe layer applied")
-check("crisis resource" in base["content"], "including self-harm handling")
+check("self-harm" in base["content"] and "crisis line" in base["content"],
+      "self-harm names a specific way to get help")
 reply_spec = P._CASE_FIELDS[P._CASE_FIELDS.index("'ai_response'"):]
 check("two to four sentences" not in reply_spec, "generated replies uncapped too")
 check("two to four sentences" in P._CASE_FIELDS,

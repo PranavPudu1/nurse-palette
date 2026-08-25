@@ -965,6 +965,12 @@ def _render_scores(fb: dict | None, rubric: list[dict], idx: int,
                             f"would take**")
                 st.write(c.get("why_not_higher", ""))
 
+    # Adjusting the rubric lives with the rubric. It used to sit full width at
+    # the bottom of the page and was silently dropped when the workspace was
+    # split into layouts; anchoring it here means every layout gets it and none
+    # can lose it again. Collapsed, it costs one line.
+    _render_rubric_editor()
+
     # The nudge that replaced the AI revision: their own words, pointed at the
     # box beside this column, with no generated text to accept.
     missing = _unincorporated(idx, draft) if draft else []
@@ -1093,6 +1099,7 @@ LAYOUTS = {
     "B": ("Workbench", "Everything visible at once, in three columns."),
     "C": ("Split", "Case holds the left half; work steps down the right."),
     "D": ("Conversation", "The chat is the page; work docks beneath it."),
+    "O": ("Original", "What was live before this pass, for comparison."),
 }
 _DEFAULT_LAYOUT = "A"
 
@@ -1343,7 +1350,35 @@ def _layout_d(idx, theme, cases, scenario) -> None:
     _ui_save(theme, cases, idx)
 
 
-_LAYOUT_FNS = {"A": _layout_a, "B": _layout_b, "C": _layout_c, "D": _layout_d}
+def _layout_o(idx, theme, cases, scenario) -> None:
+    """The layout that was live before this pass, kept so the four new ones can
+    be judged against something rather than against a description of it.
+
+    Unchanged on purpose, including the parts the new layouts improve on: it
+    scrolls, and the questions and the score compete for the same vertical space
+    as the conversation.
+    """
+    ss = st.session_state
+    draft = (ss.get(f"sb_answer_{idx}") or "").strip()
+    scores, middle, asks = st.columns([1, 1.35, 1], gap="medium")
+    with scores:
+        _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
+    with middle:
+        _ui_cases(cases, 430)
+        st.write("")
+        _ui_rule(idx, height=170)
+        _ui_tried(idx, cases, 300)
+    with asks:
+        _ui_before(idx, scenario)
+        _ui_after(idx)
+    st.write("")
+    _render_version_compare(idx, scenario, draft)
+    st.write("")
+    _ui_save(theme, cases, idx)
+
+
+_LAYOUT_FNS = {"A": _layout_a, "B": _layout_b, "C": _layout_c, "D": _layout_d,
+               "O": _layout_o}
 
 
 def _render_theme_workspace() -> None:

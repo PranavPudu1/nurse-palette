@@ -8,6 +8,36 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.4 — 2026-08-25 — two-level testing, layout prototypes, version control
+
+First version with a git history. Everything before this was reconstructed from
+the working tree.
+
+- **The three comparison rounds run twice.** Per theme against the rule just
+  written, then again at the end against the policy synthesized from all of
+  them. In the theme rounds the model reads only that rule, and round 2 hands
+  the rule box back so the person edits their own words rather than accepting a
+  rewrite. 27 comparisons per session.
+- **Five workspace layouts** behind a switcher visible only in test sessions:
+  four new prototypes and the previous layout kept for comparison. All five
+  write the same session state.
+- **Reflective answers were single-line inputs** showing roughly the first eight
+  words. They are text areas now, and every question is required.
+- **Two questions at setup**, before any case exists, so what a participant
+  brings is theirs rather than a reaction to a case we wrote.
+- Answers no longer vanish when a widget stops rendering, which the staged
+  layouts would have caused.
+- The rubric editor had been orphaned by the layout refactor and is reachable
+  again, anchored to the score it edits.
+- "Edit this answer" on the review page navigated nowhere; comparison rows now
+  record the theme they tested; dropped an export field nothing wrote.
+- Both design documents rewritten to one form: what was decided, where you see
+  it, why, and the source.
+- Dead code removed: the flat six-case generator, the adaptive clarifying round,
+  the reference-answer generator.
+
+---
+
 ## v0.3 — 2026-08-17 — theme-first restructure
 
 Deployment `37f83c47-d774-4445-8cc8-d95bb3b7d17c`. First version under version
