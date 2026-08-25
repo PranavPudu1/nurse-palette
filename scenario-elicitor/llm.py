@@ -278,6 +278,20 @@ def reflect_before(agent: str, does: str, audience: str, scenario: dict) -> dict
                  prompts.REFLECT_SCHEMA, mock)
 
 
+def reflect_intake(agent: str, does: str, audience: str) -> dict:
+    """Socratic questions asked at setup, before any case exists."""
+    who = (audience or "the person it acts for").strip()
+    mock = {"questions": [
+        {"type": "assumptions",
+         "question": f"What are you taking for granted about what this AI can "
+                     f"already judge on its own for {who}?"},
+        {"type": "viewpoints",
+         "question": f"Where would {who} draw the line differently from you?"},
+    ][:prompts.N_REFLECT_INTAKE]}
+    return _call(prompts.reflect_intake_messages(agent, does, audience),
+                 prompts.REFLECT_SCHEMA, mock)
+
+
 def reflect_after(agent: str, does: str, audience: str, scenario: dict,
                   draft: str) -> dict:
     """Socratic questions grounded in what the person actually wrote."""

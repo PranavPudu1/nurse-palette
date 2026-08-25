@@ -24,6 +24,15 @@ at.text_input(key="gate_code").set_value("TEST").run(); click(at, "Enter")
 at.text_input(key="gate_name").set_value("T").run(); click(at, "Begin")
 click(at, "Continue")
 at.text_input(key="sb_audience_input").set_value("my child, age 10").run()
+_intake = [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]
+assert _intake, "no intake questions were asked"
+_cont = [b for b in at.button if b.label == "Continue"][0]
+assert _cont.disabled, "Continue was open with the intake questions unanswered"
+for _w in _intake:
+    at.text_area(key=_w.key).set_value("I want her told, gently.").run()
+_cont = [b for b in at.button if b.label == "Continue"][0]
+assert not _cont.disabled, "Continue still blocked after answering"
+print(f"intake: {len(_intake)} questions, gate holds")
 click(at, "Continue")
 ss = at.session_state
 DRAFT = "Summarize it calmly for my 10-year-old and never repeat graphic detail."

@@ -156,6 +156,58 @@ def render_describe() -> None:
                       "next. Mention what matters, what it should never do, or when it "
                       "should check with you. You can also skip this.")
     ss.sb_desc = ss.sb_desc_input
+    _render_intake_questions()
+
+
+def _intake_slots() -> list[tuple[str, str]]:
+    qs = st.session_state.get("sb_rqi") or []
+    return [(f"sb_rai_{i}", _TYPE_NAMES.get((q.get("type") or "").strip(),
+                                            "Reflect"))
+            for i, q in enumerate(qs) if (q.get("question") or "").strip()]
+
+
+def _intake_answers() -> list[dict]:
+    ss = st.session_state
+    out = []
+    for i, q in enumerate(ss.get("sb_rqi") or []):
+        ans = (ss.get(f"sb_rai_{i}") or "").strip()
+        if ans:
+            out.append({"placement": "intake", "type": (q.get("type") or "").strip(),
+                        "question": q.get("question", ""), "answer": ans})
+    return out
+
+
+def _render_intake_questions() -> None:
+    """Two questions asked here, before any case has been generated.
+
+    Everywhere else the questions hang off a concrete situation, which means the
+    first thing a participant considers is a case we wrote. These come first and
+    are about them and their child, so what they bring to the cases is their
+    own.
+    """
+    ss = st.session_state
+    who = (ss.get("sb_audience") or "").strip()
+    if not who:
+        return          # nothing to ask about until they say who this is for
+    if "sb_rqi" not in ss:
+        with st.spinner("Preparing two questions..."):
+            rq = llm.reflect_intake(ss.sb_agent, _does(), who)
+        ss["sb_rqi"] = rq.get("questions") or []
+        store.log_event(_rid(), "describe", "reflect_intake",
+                        {"questions": ss["sb_rqi"]})
+    if not ss["sb_rqi"]:
+        return
+    st.write("")
+    section("Before we start")
+    st.caption("Two questions about you and your child, before you see any "
+               "situations. Answer both to continue.")
+    for i, q in enumerate(ss["sb_rqi"]):
+        text = (q.get("question") or "").strip()
+        if text:
+            _render_one_question(f"sb_rai_{i}",
+                                 _TYPE_NAMES.get((q.get("type") or "").strip(),
+                                                 "Reflect"),
+                                 text, "reflect_before")
 
 
 # ---------------------------------------------------------------------------
@@ -2117,7 +2169,8 @@ def render_output() -> None:
         return
     artifact = export.build_artifact(
         agent=ss.sb_agent, frame=ss.sb_frame or {}, description=ss.sb_desc,
-        audience=ss.sb_audience, scenarios=ss.sb_scenarios, answers=ss.sb_answers,
+        audience=ss.sb_audience, intake_reflection=_intake_answers(),
+        scenarios=ss.sb_scenarios, answers=ss.sb_answers,
         confirm=ss.sb_confirm, rubric=ss.sb_rubric,
         policy=ss.get("sb_policy"), policy_log=ss.get("sb_policy_log"),
         submitted=bool(ss.get("sb_submitted")))

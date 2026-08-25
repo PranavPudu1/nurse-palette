@@ -155,6 +155,14 @@ def can_advance(key: str) -> bool:
     ss = st.session_state
     if key == "agent":
         return bool(ss.sb_agent.strip())
+    if key == "describe":
+        # Same rule as everywhere else: a question that can be skipped does not
+        # make anyone think. Nothing to answer until they have named an
+        # audience, so an empty audience does not trap them here.
+        import steps
+        if not (ss.get("sb_audience") or "").strip():
+            return True
+        return not [k for k, _ in steps._intake_slots() if not steps._answered(k)]
     if key == "themes":
         # Forward travel is only allowed from the menu, never from inside a
         # theme: Continue on the workspace would silently abandon a half-written
@@ -162,7 +170,7 @@ def can_advance(key: str) -> bool:
         if ss.get("sb_theme"):
             return False
         return len(ss.get("sb_themes_done") or []) >= N_THEMES
-    return True  # describe is optional, output is last
+    return True  # agent is preselected, output is last
 
 
 def _stepper_html(steps: list, cur: int) -> str:

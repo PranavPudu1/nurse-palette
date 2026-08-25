@@ -12,6 +12,7 @@ import json
 
 
 def build_artifact(*, agent: str, frame: dict, description: str, audience: str,
+                   intake_reflection: list[dict] | None = None,
                    scenarios: list[dict], answers: list[dict],
                    confirm: list[dict] | None = None,
                    rubric: list[dict] | None = None,
@@ -24,6 +25,7 @@ def build_artifact(*, agent: str, frame: dict, description: str, audience: str,
         "does": (frame or {}).get("does", ""),
         "audience": audience,
         "description": description,
+        "intake_reflection": intake_reflection or [],
         "submitted": submitted,
         "rubric": rubric or [],
         # The one policy, and every version of it with what changed and why.

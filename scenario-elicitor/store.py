@@ -172,6 +172,7 @@ def log_event(rid: str, step: str, kind: str, payload: dict | None = None) -> No
 _SNAPSHOT_KEYS = {
     "sb_step", "sb_step_key", "sb_condition",
     "sb_theme", "sb_tphase", "sb_themes_done", "sb_tcidx", "sb_tround",
+    "sb_rqi",
     "sb_agent", "sb_frame", "sb_desc", "sb_audience", "sb_scenarios",
     "sb_next_id", "sb_idx", "sb_answers", "sb_examples", "sb_cidx", "sb_confirm",
     "sb_confirm_cache", "sb_rubric", "sb_submitted",
@@ -181,7 +182,7 @@ _SNAPSHOT_PREFIXES = ("sb_answer_", "sb_first_", "sb_fb_", "sb_lastfb_",
                       "sb_nrev_", "sb_cnote_",
                       "sb_chat_", "sb_pick_", "sb_vq_", "sb_vcmp_",
                       # reflective questions and the answers to them
-                      "sb_rqb_", "sb_rqa_", "sb_rab_", "sb_raa_", "sb_rap_",
+                      "sb_rqb_", "sb_rqa_", "sb_rab_", "sb_raa_", "sb_rap_", "sb_rai_",
                       # per-item comparison reasons and critiques
                       "sb_crit_")
 

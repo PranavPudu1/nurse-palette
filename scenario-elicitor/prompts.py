@@ -653,6 +653,44 @@ def reflect_before_messages(agent: str, does: str, audience: str,
             {"role": "user", "content": user}]
 
 
+N_REFLECT_INTAKE = 2
+
+
+def reflect_intake_messages(agent: str, does: str, audience: str,
+                            n: int = N_REFLECT_INTAKE) -> list[dict]:
+    """Questions asked at setup, before any case has been seen.
+
+    Min: "it might be even before they see the specific case... maybe add a few
+    more questions when you ask about name and tell me about your kid." Every
+    other question in the tool is anchored to a concrete situation, which means
+    the first thing a participant thinks about is whatever case we generated.
+    These come first and are about the child and the parent's own position, so
+    what they bring is theirs rather than a reaction to our material.
+
+    Same five question types and the same schema as the rest; only the subject
+    changes, from a case to the person and their child.
+    """
+    system = (
+        f"A person is about to set out how an AI agent ({agent.strip()}: "
+        f"{does.strip()}) should behave for someone they are responsible for."
+        f"{_audience_clause(audience)}\n\n"
+        + _socratic_preamble() +
+        f"Write exactly {n} questions, of DIFFERENT types, about this person's "
+        "own position before they have seen any specific situation: what they "
+        "are taking for granted about what this AI can and cannot do, how much "
+        "they want to decide themselves rather than leave to it, and how the "
+        "person it acts for might see it differently. Ask short, plain "
+        "questions. Use the exact type keys. Do not use em dashes.\n\n"
+        "HARD RULE. This person has written nothing yet, so you know nothing "
+        "about what they think. Never state or imply that they believe, assume, "
+        "want or prefer anything. Ask in the conditional, about what they would "
+        "want."
+    )
+    user = f"The agent acts for: {(audience or 'someone they are responsible for').strip()}."
+    return [{"role": "system", "content": system},
+            {"role": "user", "content": user}]
+
+
 def reflect_after_messages(agent: str, does: str, audience: str, scenario: dict,
                            draft: str, n: int = N_REFLECT_AFTER) -> list[dict]:
     """Questions shown after the first Check, grounded in what they wrote.
