@@ -104,15 +104,3 @@ Qualitative Research in Psychology 20, 3 (2023).
 see whether the reasoning holds. Driscoll cites this as their interview method
 and we credit both. Ours is weaker than theirs by design: it is one line fixed
 when the case is written, and cannot adapt to what the person just said.
-
-## What we did not take
-
-**GATE and OPEN** motivated the project but contributed no mechanism. Their
-elicitation is model-driven, which is the thing our design departs from.
-
-**Injecting a published taxonomy into a generation prompt** looks borrowed from
-Botender and is not: it was already in the tool before we read them. Recorded
-here for honesty in the other direction.
-
-**No human validation.** Botender ran a 90-participant study on its case
-generation and iRULER had two experts rate 96 essays. We have run neither.
