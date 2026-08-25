@@ -78,6 +78,7 @@ table.f4 td:last-child {
   font-size: 8.6pt; color: #6B5B45; font-style: italic;
 }
 table.src td:first-child { font-weight: 600; }
+table.src td:nth-child(3) { color: #4A3D2C; }
 .n { color: #A89578; font-variant-numeric: tabular-nums; padding-right: 4pt; }
 blockquote {
   margin: 0 0 8pt; padding: 6pt 10pt; background: #FBF7EF;
@@ -104,7 +105,7 @@ def cells(row: str) -> list[str]:
 def orientation(md: str) -> str:
     """Wide if any table has four or more columns, prose otherwise."""
     for ln in md.splitlines():
-        if ln.startswith("|") and len(cells(ln)) >= 4:
+        if ln.startswith("|") and len(cells(ln)) >= 3:
             return "wide"
     return "prose"
 
@@ -128,6 +129,8 @@ def render(md: str) -> str:
             if numbered:
                 th = "<th></th>" + th
                 cols = ("3%", "19%", "19%", "42%", "17%")
+            elif len(head) == 3:
+                cols = ("14%", "56%", "30%")
             else:
                 cols = ("13%", "87%")
             cg = "".join(f'<col style="width:{w}">' for w in cols)
