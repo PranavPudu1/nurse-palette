@@ -18,8 +18,15 @@ from pathlib import Path
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
+# Landscape only where a wide table needs it. A prose document set landscape
+# runs to well over a hundred characters a line, which is past the point where
+# the eye reliably finds the start of the next one.
+PAGE = {
+    "wide": "@page { size: letter landscape; margin: 0.5in 0.55in 0.6in; }",
+    "prose": "@page { size: letter portrait; margin: 0.85in 1.05in 0.9in; }",
+}
+
 CSS = """
-@page { size: letter landscape; margin: 0.5in 0.55in 0.6in; }
 * { box-sizing: border-box; }
 body {
   font: 10pt/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -30,11 +37,14 @@ h1 {
 }
 .sub { color: #7A6A55; font-size: 10pt; margin: 0 0 14pt; }
 h2 {
-  font-size: 13pt; margin: 20pt 0 7pt; padding-bottom: 4pt;
+  font-size: 12.5pt; margin: 22pt 0 8pt; padding-bottom: 4pt;
   border-bottom: 1.5px solid #C9B896; break-after: avoid;
 }
 h2:first-of-type { margin-top: 6pt; }
 p { margin: 0 0 7pt; max-width: 62em; }
+p.cite {
+  font-size: 8.7pt; line-height: 1.4; color: #7A6A55; margin-bottom: 9pt;
+}
 ul { margin: 0 0 8pt; padding-left: 16pt; max-width: 62em; }
 li { margin-bottom: 4pt; }
 code {
@@ -89,6 +99,14 @@ def inline(t: str) -> str:
 
 def cells(row: str) -> list[str]:
     return [c.strip() for c in row.strip().strip("|").split("|")]
+
+
+def orientation(md: str) -> str:
+    """Wide if any table has four or more columns, prose otherwise."""
+    for ln in md.splitlines():
+        if ln.startswith("|") and len(cells(ln)) >= 4:
+            return "wide"
+    return "prose"
 
 
 def render(md: str) -> str:
@@ -160,6 +178,13 @@ def render(md: str) -> str:
             while i < len(lines) and lines[i].strip() and not lines[i][:1] in "#|->":
                 buf.append(lines[i].strip()); i += 1
             para = inline(" ".join(buf))
+            # A citation is reference material, not argument. Setting it smaller
+            # keeps the eye on what we took from the paper rather than on the
+            # volume number. Detected rather than marked up, so the source
+            # markdown stays plain.
+            if re.search(r"(CHI '\d\d|ICLR \d{4}|EACL \d{4}|10\.\d{4,}/|"
+                         r"\b\d+, \d+ \(\d{4}\))", para):
+                out.append(f'<p class="cite">{para}</p>'); continue
             if not sub and not out:
                 sub = para
             else:
@@ -169,7 +194,7 @@ def render(md: str) -> str:
     head = (f"<h1>{title}</h1>" if title else "") + \
            (f'<p class="sub">{sub}</p>' if sub else "")
     return (f"<!doctype html><meta charset='utf-8'><title>{title}</title>"
-            f"<style>{CSS}</style>{head}{''.join(out)}")
+            f"<style>{PAGE[orientation(md)]}{CSS}</style>{head}{''.join(out)}")
 
 
 def main() -> int:
