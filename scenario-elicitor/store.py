@@ -171,14 +171,14 @@ def log_event(rid: str, step: str, kind: str, payload: dict | None = None) -> No
 # allowlist instead of taking every sb_* key.
 _SNAPSHOT_KEYS = {
     "sb_step", "sb_step_key", "sb_condition",
-    "sb_theme", "sb_tphase", "sb_themes_done", "sb_tcidx",
+    "sb_theme", "sb_tphase", "sb_themes_done", "sb_tcidx", "sb_tround",
     "sb_agent", "sb_frame", "sb_desc", "sb_audience", "sb_scenarios",
     "sb_next_id", "sb_idx", "sb_answers", "sb_examples", "sb_cidx", "sb_confirm",
     "sb_confirm_cache", "sb_rubric", "sb_submitted",
     "sb_round", "sb_cmp", "sb_revealed", "sb_policy", "sb_policy_log",
 }
 _SNAPSHOT_PREFIXES = ("sb_answer_", "sb_first_", "sb_fb_", "sb_lastfb_",
-                      "sb_nrev_", "sb_why_", "sb_cnote_",
+                      "sb_nrev_", "sb_cnote_",
                       "sb_chat_", "sb_pick_", "sb_vq_", "sb_vcmp_",
                       # reflective questions and the answers to them
                       "sb_rqb_", "sb_rqa_", "sb_rab_", "sb_raa_", "sb_rap_",

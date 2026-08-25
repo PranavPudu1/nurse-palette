@@ -471,24 +471,18 @@ def _record_answer(scenario: dict, theme: str = "",
                           if t.get("role") == "assistant"],
         "n_tests": _n_tests((ss.get(f"sb_chat_{idx}") or {}).get("turns", [])),
         "transcript": (ss.get(f"sb_chat_{idx}") or {}).get("turns", []),
-        "why": ss.get(f"sb_why_{idx}", ""),
         "reflection": _reflection_answers(idx)}
-    editing_sid = ss.get("sb_editing_sid")
-    if editing_sid is not None and editing_sid == scenario["id"]:
-        # Revision of a previously saved answer (before submission). Replace in
-        # place; the full history stays in the events log.
-        for i, a in enumerate(ss.sb_answers):
-            if a["scenario_id"] == editing_sid:
-                ss.sb_answers[i] = answer
-                break
-        store.log_event(_rid(), "respond", "answer_edit", answer)
-        ss.pop("sb_editing_sid", None)
-        ss.sb_idx = ss.pop("sb_edit_prev_idx", len(ss.sb_scenarios))
-        _goto("output")
+    # One row per theme. Rewriting a theme replaces its row rather than adding a
+    # second, whether that happens by picking it again from the menu or by
+    # revising from the review page.
+    prev = next((i for i, a in enumerate(ss.sb_answers)
+                 if a.get("theme") == theme), None)
+    if prev is not None:
+        ss.sb_answers[prev] = answer
+        store.log_event(_rid(), "themes", "answer_edit", answer)
     else:
         ss.sb_answers.append(answer)
-        store.log_event(_rid(), "respond", "answer_save", answer)
-        ss.sb_idx += 1
+        store.log_event(_rid(), "themes", "answer_save", answer)
 
 
 
@@ -501,9 +495,18 @@ _SCORE_BANDS = [(85, "Excellent", "#2E7D4F"), (70, "Good", "#8A6D1B"),
 # Two placements, per the design: one set under the situation before anything is
 # written, one set after the first Check grounded in what the person wrote. These
 # ask why the person wants what they want; the rubric separately judges whether
-# the rule is specific enough to act on. Answers are optional.
+# the rule is specific enough to act on. Answers are required: their purpose is
+# to make someone think before writing, and an unanswered question does not do
+# that. They also feed the rubric check, so a skipped one silently weakens it.
 
 _TYPE_NAMES = {t["key"]: t["name"] for t in prompts.SOCRATIC_TYPES}
+
+
+MIN_ANSWER = 3          # characters, enough to reject whitespace and stray keys
+
+
+def _answered(key: str) -> bool:
+    return len((st.session_state.get(key) or "").strip()) >= MIN_ANSWER
 
 
 def _render_one_question(key: str, label: str, text: str, info_key: str) -> None:
@@ -512,27 +515,60 @@ def _render_one_question(key: str, label: str, text: str, info_key: str) -> None
     The icon differs per item on purpose: the probe is a counterfactual from an
     interview method, the others are Socratic types from a taxonomy, and a
     reader should be able to tell which is which.
+
+    The answer box is a text_area, not a text_input. It was a single line, which
+    showed roughly the first eight words of an answer and hid the rest behind a
+    cursor, so people could not read back what they had written.
     """
+    done = _answered(key)
+    mark = ("" if done else
+            '<span class="np-pill" style="background:#F4E6E1;color:#B0472F;">'
+            'needed</span>')
     st.markdown(
         f'<div class="np-card" style="margin-bottom:6px;">'
-        f'<span class="np-pill">{label}</span>{provenance.icon(info_key)}'
+        f'<span class="np-pill">{label}</span>{provenance.icon(info_key)}{mark}'
         f'<div class="np-sub" style="margin-top:6px;">{text}</div></div>',
         unsafe_allow_html=True)
-    st.text_input("Your thoughts (optional)", key=key,
-                  placeholder="optional, a sentence is plenty",
-                  label_visibility="collapsed")
+    st.text_area("Your thoughts", key=key, height=90,
+                 placeholder="a sentence or two is plenty",
+                 label_visibility="collapsed")
+
+
+def _question_slots(idx: int, slot: str) -> list[tuple[str, str]]:
+    """(answer key, label) for every question in one slot, in display order.
+
+    Keyed by POSITION, not by Socratic type. Two questions of the same type in
+    one slot used to share a single answer box, silently merging two answers
+    into one.
+    """
+    ss = st.session_state
+    out = []
+    if slot == "b":
+        sc = _theme_scenario(idx)
+        if (sc.get("probe") or "").strip():
+            out.append((f"sb_rap_{idx}", "As you write, consider"))
+    key = f"sb_rq{slot}_{idx}"
+    for i, q in enumerate(ss.get(key) or []):
+        if (q.get("question") or "").strip():
+            out.append((f"sb_ra{slot}_{idx}_{i}",
+                        _TYPE_NAMES.get((q.get("type") or "").strip(), "Reflect")))
+    return out
+
+
+def _unanswered(idx: int, slot: str) -> list[str]:
+    return [label for key, label in _question_slots(idx, slot) if not _answered(key)]
 
 
 def _render_reflection(idx: int, slot: str, questions: list[dict]) -> None:
     """slot is 'b' (before writing) or 'a' (after the first check)."""
     info_key = "reflect_before" if slot == "b" else "reflect_after"
-    for q in questions or []:
-        qtype = (q.get("type") or "").strip()
+    for i, q in enumerate(questions or []):
         text = (q.get("question") or "").strip()
         if not text:
             continue
-        _render_one_question(f"sb_ra{slot}_{idx}_{qtype}",
-                             _TYPE_NAMES.get(qtype, "Reflect"), text, info_key)
+        _render_one_question(f"sb_ra{slot}_{idx}_{i}",
+                             _TYPE_NAMES.get((q.get("type") or "").strip(),
+                                             "Reflect"), text, info_key)
 
 
 def _reflection_answers(idx: int) -> list[dict]:
@@ -545,18 +581,19 @@ def _reflection_answers(idx: int) -> list[dict]:
     out = []
     probe_ans = (ss.get(f"sb_rap_{idx}") or "").strip()
     if probe_ans:
-        sc = (ss.sb_scenarios or [])[idx] if idx < len(ss.sb_scenarios or []) else {}
+        # The probe belongs to this theme's own case. This used to index the
+        # flat scenario list by idx, which is a THEME number, so it reported
+        # some unrelated case's probe as the question that was answered.
         out.append({"placement": "before", "type": "probe",
-                    "question": (sc.get("probe") or "").strip(),
+                    "question": (_theme_scenario(idx).get("probe") or "").strip(),
                     "answer": probe_ans})
     for slot, key in (("b", f"sb_rqb_{idx}"), ("a", f"sb_rqa_{idx}")):
-        for q in (ss.get(key) or []):
-            qtype = (q.get("type") or "").strip()
-            ans = (ss.get(f"sb_ra{slot}_{idx}_{qtype}") or "").strip()
+        for i, q in enumerate(ss.get(key) or []):
+            ans = (ss.get(f"sb_ra{slot}_{idx}_{i}") or "").strip()
             if ans:
                 out.append({"placement": "before" if slot == "b" else "after",
-                            "type": qtype, "question": q.get("question", ""),
-                            "answer": ans})
+                            "type": (q.get("type") or "").strip(),
+                            "question": q.get("question", ""), "answer": ans})
     return out
 
 
@@ -648,6 +685,27 @@ def _theme_cases(theme: str) -> list[dict]:
             if s.get("category") == theme]
 
 
+def _theme_index(theme: str) -> int:
+    """A theme's stable slot, used to key every per-theme session value.
+
+    Position in THEME_NAMES rather than a running counter, so the keys for a
+    theme are the same whether it was worked on first or last, and revisiting a
+    theme finds what was written the first time.
+    """
+    names = prompts.THEME_NAMES
+    return names.index(theme) if theme in names else 0
+
+
+def _theme_scenario(idx: int) -> dict:
+    """The case a theme's per-theme values hang off: its first, or {} if none."""
+    ss = st.session_state
+    if idx < len(prompts.THEME_NAMES):
+        cases = _theme_cases(prompts.THEME_NAMES[idx])
+        if cases:
+            return cases[0]
+    return {}
+
+
 def _theme_answer(theme: str) -> dict | None:
     return next((a for a in st.session_state.sb_answers
                  if a.get("theme") == theme), None)
@@ -677,6 +735,7 @@ def _open_theme(theme: str) -> None:
     ss = st.session_state
     ss.sb_theme = theme
     ss.sb_tphase = "write"
+    ss.sb_tround = 1
     ss.sb_tcidx = 0
 
 
@@ -963,7 +1022,8 @@ def _save_theme_rule(theme: str, cases: list[dict]) -> None:
     if theme not in done:
         done.append(theme)
     ss.sb_themes_done = done
-    ss.sb_tphase = "compare"
+    ss.sb_tphase = "test"
+    ss.sb_tround = 1
     ss.sb_tcidx = 0
 
 
@@ -974,7 +1034,7 @@ def _render_theme_workspace() -> None:
     cases = _ensure_theme_cases(theme)
     # One rule per theme, so the per-case session keys all hang off a stable
     # index for this theme rather than off a position in a flat case list.
-    idx = prompts.THEME_NAMES.index(theme) if theme in prompts.THEME_NAMES else 0
+    idx = _theme_index(theme)
     ss.sb_idx = idx
     scenario = cases[0] if cases else {"id": -1, "title": theme, "situation": "",
                                        "at_stake": "", "considerations": [],
@@ -1009,9 +1069,15 @@ def _render_theme_workspace() -> None:
     _render_rubric_editor()
 
     st.write("")
+    missing = _unanswered(idx, "b")
+    no_rule = not (ss.get(f"sb_answer_{idx}") or "").strip()
     st.button("Save this rule and test it", key=f"sb_save_{idx}", type="primary",
-              disabled=not (ss.get(f"sb_answer_{idx}") or "").strip(),
+              disabled=bool(missing) or no_rule,
               on_click=_save_theme_rule, args=(theme, cases))
+    if missing:
+        st.caption("Answer these before saving: " + ", ".join(missing) + ".")
+    elif no_rule:
+        st.caption("Write your rule to continue.")
 
 
 def _render_rule_column(idx: int, scenario: dict, cases: list[dict]) -> None:
@@ -1059,8 +1125,9 @@ def _render_ask_column(idx: int, scenario: dict) -> None:
     probe = (scenario.get("probe") or "").strip()
     if probe or ss.get(f"sb_rqb_{idx}"):
         section("Before you answer")
-        st.caption("No right answer, and you can skip any of them. What you "
-                   "write here is used when your rule is checked.")
+        st.caption("There is no right answer. What you write here is used when "
+                   "your rule is checked, so answer all of them before you "
+                   "write.")
         if probe:
             _render_one_question(f"sb_rap_{idx}", "As you write, consider",
                                  probe, "probe")
@@ -1119,8 +1186,8 @@ def render_themes() -> None:
         return
     if not ss.get("sb_theme"):
         _render_theme_menu()
-    elif ss.get("sb_tphase") == "compare":
-        _render_theme_compare()
+    elif ss.get("sb_tphase") == "test":
+        _render_theme_test()
     else:
         _render_theme_workspace()
 
@@ -1128,15 +1195,47 @@ def render_themes() -> None:
 # ---------------------------------------------------------------------------
 # Round 1, inline, scoped to the theme just written
 # ---------------------------------------------------------------------------
-# Min: "we might need to have a pairwise comparison right after each case...
-# keeping it to that specific case is gonna help them iteratively work on the
-# rules." So round 1 runs here rather than at the end. Rounds 2 and 3 stay in
-# render_confirm: they score the synthesized policy, which cannot exist until
-# every theme is written.
+# The theme testing loop
+# ---------------------------------------------------------------------------
+# The same three rounds run twice, at two levels, because they test two
+# different claims.
+#
+#   Here, per theme, against the rule just written:
+#       does MY RULE capture what I want?
+#   In render_confirm, at the end, against the synthesized policy:
+#       does the POLICY capture it, across everything I wrote?
+#
+# What the model follows in these rounds is that one theme's rule and nothing
+# else, so a disagreement points at a gap in the rule rather than at some
+# aggregate the person never wrote.
+#
+# Round 2 hands the rule box back rather than offering a rewrite. The AI
+# revision was removed earlier on Min's reasoning that people accept whatever
+# the model puts in front of them; reintroducing it here would undo that and add
+# another generated component needing accuracy validation. Round 3 then scores
+# the edited rule, so the loop measures whether the person's own revision
+# actually closed the gap they were shown.
 
-def _theme_cmps(theme: str) -> list[dict]:
+N_THEME_ROUND = 2      # comparisons per theme round; 3 rounds x 3 themes
+
+
+def _theme_key(theme: str, rnd: int) -> str:
+    return f"{theme}:{rnd}"
+
+
+def _theme_rule(theme: str) -> str:
+    """The rule as it stands now, including any round-2 edit."""
     ss = st.session_state
-    key = f"1:{theme}"
+    live = (ss.get(f"sb_answer_{_theme_index(theme)}") or "").strip()
+    if live:
+        return live
+    return ((_theme_answer(theme) or {}).get("ideal_behavior") or "").strip()
+
+
+def _theme_cmps(theme: str, rnd: int) -> list[dict]:
+    """This theme's comparisons for one round, generated once and cached."""
+    ss = st.session_state
+    key = _theme_key(theme, rnd)
     if key in ss.sb_cmp:
         return ss.sb_cmp[key]
     ans = _theme_answer(theme)
@@ -1145,11 +1244,10 @@ def _theme_cmps(theme: str) -> list[dict]:
     used = [c.get("dimension", "") for r in ss.sb_cmp.values() for c in r]
     out = []
     with st.spinner("Building a couple of close calls..."):
-        for k in range(N_THEME_CMPS):
+        for k in range(N_THEME_ROUND):
             data = llm.confirm_pairwise(ss.sb_agent, _does(), ss.sb_desc,
-                                        ss.sb_audience, ans,
-                                        ans.get("ideal_behavior", ""),
-                                        avoid=used, edge=(k > 0))
+                                        ss.sb_audience, ans, _theme_rule(theme),
+                                        avoid=used, edge=(rnd > 1))
             opts = list(data.get("options") or [])
             while len(opts) < 2:
                 opts.append({"label": f"Option {len(opts) + 1}",
@@ -1157,7 +1255,8 @@ def _theme_cmps(theme: str) -> list[dict]:
             dim = (data.get("dimension") or "").strip()
             used.append(dim)
             out.append({
-                "id": f"t{len(ss.sb_cmp)}i{k}", "round": 1, "theme": theme,
+                "id": f"{theme[:12]}r{rnd}i{k}", "round": rnd, "theme": theme,
+                "level": "theme",
                 "scenario_id": ans.get("scenario_id"),
                 "title": ans.get("title", ""), "situation": ans.get("situation", ""),
                 "instance": (data.get("instance") or "").strip(),
@@ -1168,39 +1267,181 @@ def _theme_cmps(theme: str) -> list[dict]:
     return out
 
 
-def _theme_next(cmp: dict, i: int) -> None:
+def _rule_answer(cmp: dict, theme: str) -> dict:
+    """What this theme's rule picks, cached on the item.
+
+    Reuses the policy picker with a one-principle policy rather than adding a
+    prompt: it already takes a principle list and returns a choice plus the line
+    that decided it, which is exactly what a single rule needs.
+    """
+    ss = st.session_state
+    if "model" not in cmp:
+        rule = _theme_rule(theme)
+        with st.spinner("Applying your rule..."):
+            data = llm.policy_pick(ss.sb_agent, _does(), ss.sb_audience,
+                                   {"principles": [rule] if rule else []},
+                                   cmp.get("instance", ""),
+                                   cmp["options"][0], cmp["options"][1])
+        cmp["model"] = {"choice": (data.get("choice") or "A").strip().upper()[:1],
+                        "reason": (data.get("reason") or "").strip(),
+                        "rule": rule, "_mock": data.get("_mock")}
+    return cmp["model"]
+
+
+def _theme_commit(cmp: dict, i: int) -> None:
+    """Record the pick. Round 1 moves on; rounds 2 and 3 reveal in place."""
     ss = st.session_state
     choice = ss.get(f"sb_pick_{cmp['id']}")
     if not choice:
         return
-    _record_pick(cmp, choice, i)
+    _record_pick(cmp, choice, i, advance=False)
+    if cmp["round"] == 1:
+        ss.sb_tcidx = ss.get("sb_tcidx", 0) + 1
+    else:
+        ss.sb_revealed[cmp["id"]] = True
+
+
+def _theme_after_reveal(cmp: dict, i: int) -> None:
+    """Close out a revealed item: record what the rule did, then move on."""
+    ss = st.session_state
+    row = _row_for(cmp["id"])
+    model = cmp.get("model") or {}
+    if row is not None:
+        row["model_choice"] = model.get("choice", "")
+        row["model_reason"] = model.get("reason", "")
+        row["agreed"] = bool(row.get("choice") == model.get("choice"))
+        row["rule_at_test"] = model.get("rule", "")
+        store.log_event(_rid(), "themes", "theme_scored",
+                        {"comparison": cmp["id"], "theme": cmp.get("theme"),
+                         "round": cmp["round"], "person": row.get("choice"),
+                         "model": model.get("choice"), "agreed": row["agreed"]})
     ss.sb_tcidx = ss.get("sb_tcidx", 0) + 1
 
 
-def _render_theme_compare() -> None:
+def _theme_advance_round() -> None:
+    ss = st.session_state
+    ss.sb_tround = ss.get("sb_tround", 1) + 1
+    ss.sb_tcidx = 0
+    store.log_event(_rid(), "themes", "theme_round_start",
+                    {"theme": ss.sb_theme, "round": ss.sb_tround})
+
+
+def _theme_agreement(theme: str) -> tuple[int, int]:
+    rows = [r for r in st.session_state.sb_confirm
+            if r.get("theme") == theme and r.get("round") == 3
+            and r.get("model_choice")]
+    return sum(1 for r in rows if r.get("agreed")), len(rows)
+
+
+_THEME_ROUND_INTRO = {
+    1: "Pick the reply you prefer and say why. Nothing is revealed yet.",
+    2: "Pick and say why. Then you will see what your rule chose, and can "
+       "change the rule if it got this wrong.",
+    3: "Pick and say why. Then you will see what your rule chose. This round "
+       "is scored and the rule no longer changes.",
+}
+
+
+def _render_theme_test() -> None:
     ss = st.session_state
     theme = ss.sb_theme
-    cmps = _theme_cmps(theme)
+    idx = _theme_index(theme)
+    rnd = ss.get("sb_tround", 1)
+    cmps = _theme_cmps(theme, rnd)
     i = ss.get("sb_tcidx", 0)
 
-    if not cmps or i >= len(cmps):
-        header(theme, "Done with this theme.")
-        st.success("Rule saved and tested. Pick your next theme.")
+    if not cmps:
+        st.info("No comparisons could be built for this theme.")
+        st.button("Back to the themes", key="sb_done_theme", type="primary",
+                  on_click=_close_theme)
+        return
+
+    # ---- round finished ---------------------------------------------------
+    if i >= len(cmps):
+        if rnd < _LAST_ROUND:
+            header(theme, f"Round {rnd} of {_LAST_ROUND} done.")
+            if rnd == 1:
+                st.success("Next you will see what your rule decides on its "
+                           "own, and can change it where it gets something "
+                           "wrong.")
+            else:
+                st.success("Your rule is settled. The last round is scored: you "
+                           "will see what it decides, but nothing changes.")
+            st.button(f"Start round {rnd + 1}", type="primary",
+                      key=f"sb_tr_{theme}_{rnd}", on_click=_theme_advance_round)
+            return
+        agreed, total = _theme_agreement(theme)
+        header(theme, "This theme is done.")
+        if total:
+            st.success(f"On the scored round your rule chose the same as you on "
+                       f"**{agreed} of {total}**.")
         st.button("Back to the themes", key="sb_done_theme", type="primary",
                   on_click=_close_theme)
         return
 
     cmp = cmps[i]
     _mock_note(cmp)
-    header(theme, f"Close call {i + 1} of {len(cmps)}. Your rule does not settle "
-                  f"this one on its own. Which should it be?")
+    revealed = rnd > 1 and ss.sb_revealed.get(cmp["id"], False)
+
+    header(theme, f"Round {rnd} of {_LAST_ROUND}. Close call {i + 1} of "
+                  f"{len(cmps)}. {_THEME_ROUND_INTRO[rnd]}")
+    _render_rule_reminder(idx)
     _render_moment(cmp)
-    _render_options(cmp, mine=ss.get(f"sb_pick_{cmp['id']}", ""))
-    chosen = _render_pick_controls(cmp, 1, i)
-    st.button("Continue", key=f"sb_tgo_{cmp['id']}", type="primary",
-              disabled=not chosen, on_click=_theme_next, args=(cmp, i))
-    if not chosen:
-        st.caption("Pick one to continue.")
+
+    model = _rule_answer(cmp, theme) if revealed else {}
+    _render_options(cmp, highlight=model.get("choice", "") if revealed else "",
+                    mine=ss.get(f"sb_pick_{cmp['id']}", ""))
+
+    if not revealed:
+        chosen = _render_pick_controls(cmp, rnd, i)
+        st.button("Continue", key=f"sb_tgo_{cmp['id']}", type="primary",
+                  disabled=not chosen, on_click=_theme_commit, args=(cmp, i))
+        if not chosen:
+            st.caption("Pick one to continue.")
+        elif rnd > 1:
+            st.caption("What your rule chose stays hidden until you continue, "
+                       "so what you write is your own view rather than a "
+                       "reaction to it.")
+        return
+
+    row = _row_for(cmp["id"]) or {}
+    same = row.get("choice") == model.get("choice")
+    tone = "#2E7D4F" if same else "#B0472F"
+    verdict = ("Your rule agrees with you here."
+               if same else "Your rule chose differently from you.")
+    yours = "left" if row.get("choice") == "A" else "right"
+    st.markdown(
+        f'<div class="np-card" style="margin:10px 0;border-color:{tone};">'
+        f'<div class="np-section-title" style="color:{tone};">{verdict}'
+        f'{provenance.icon("model_pick")}</div>'
+        f'<div class="np-sub"><b>You chose the {yours}.</b> Your rule chose '
+        f'because: {model.get("reason", "")}</div></div>',
+        unsafe_allow_html=True)
+
+    if rnd == 2:
+        section("Change your rule, if it got this wrong")
+        st.caption("This is your rule, not a suggestion from us. Edit it and "
+                   "the next comparisons use what you write here.")
+        st.text_area("Your rule", key=f"sb_answer_{idx}", height=150,
+                     label_visibility="collapsed")
+        st.button("Save and continue", type="primary",
+                  key=f"sb_tafter_{cmp['id']}", on_click=_theme_after_reveal,
+                  args=(cmp, i))
+    else:
+        st.button("Next", type="primary", key=f"sb_tafter_{cmp['id']}",
+                  on_click=_theme_after_reveal, args=(cmp, i))
+        st.caption("This round is scored. Nothing you do here changes the rule.")
+
+
+def _render_rule_reminder(idx: int) -> None:
+    """The rule under test, always on screen while it is being tested."""
+    rule = (st.session_state.get(f"sb_answer_{idx}") or "").strip()
+    if not rule:
+        return
+    st.markdown(f'<div class="np-card-muted" style="margin-bottom:10px;">'
+                f'<div class="np-section-title">Your rule</div>'
+                f'<div class="np-muted">{rule}</div></div>',
+                unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1265,7 +1506,7 @@ def _round_cmps(rnd: int) -> list[dict]:
             used.append(dim)
             out.append({
                 "id": f"r{rnd}i{k}",
-                "round": rnd,
+                "round": rnd, "level": "final", "theme": ans.get("theme", ""),
                 "scenario_id": ans.get("scenario_id"),
                 "title": ans.get("title", ""),
                 "situation": ans.get("situation", ""),
@@ -1338,6 +1579,7 @@ def _record_pick(cmp: dict, choice: str, i: int, advance: bool = False) -> None:
     rnd = cmp["round"]
     row = {
         "id": cmp["id"], "round": rnd,
+        "theme": cmp.get("theme", ""), "level": cmp.get("level", "final"),
         "scenario_id": cmp.get("scenario_id"), "title": cmp.get("title", ""),
         "situation": cmp.get("situation", ""),
         "instance": cmp.get("instance", ""), "dimension": cmp.get("dimension", ""),
@@ -1352,7 +1594,7 @@ def _record_pick(cmp: dict, choice: str, i: int, advance: bool = False) -> None:
     else:
         ss.sb_confirm.append(row)
     store.log_event(_rid(), "confirm", "confirm_pick", row)
-    if rnd > 1:
+    if rnd > 1 and cmp.get("level") != "theme":
         ss.sb_revealed[f"{rnd}_{i}"] = True
     if advance:
         ss.sb_cidx += 1
@@ -1504,9 +1746,15 @@ def _set_pick(cmp: dict, choice: str) -> None:
 
 
 def _commit_pick(cmp: dict, i: int) -> None:
+    """Commit the pick and move the screen on.
+
+    Round 1 reveals nothing, so committing has to advance or the same
+    comparison renders again with the pick already recorded. Rounds 2 and 3
+    stay put, because the reveal and what follows it happen on this screen.
+    """
     choice = st.session_state.get(f"sb_pick_{cmp['id']}")
     if choice:
-        _record_pick(cmp, choice, i)
+        _record_pick(cmp, choice, i, advance=(cmp["round"] == 1))
 
 
 def _render_pick_controls(cmp: dict, rnd: int, i: int) -> str:
@@ -1542,21 +1790,12 @@ def render_confirm() -> None:
         return
 
     rnd = ss.sb_round
-    # Round 1 no longer happens here. It runs inline inside each theme, right
-    # after that theme's rule is written, so the close calls sharpen the rule
-    # while the person is still holding it in mind. Arriving here with round 1
-    # still set means those picks are already in sb_confirm and the only thing
-    # left to do is write the policy from them.
-    if rnd == 1:
-        header("Comparisons", "Your rules and your choices are in.")
-        st.success(f"You wrote {len(ss.sb_answers)} rules and made "
-                   f"{len(ss.sb_confirm)} close calls. Next, one policy gets "
-                   f"written from all of it, and then you will see how it "
-                   f"decides on its own.")
-        st.button("Write my policy and start round 2", type="primary",
-                  on_click=_advance_round)
-        return
-
+    # These are the FINAL rounds, over the policy synthesized from every theme.
+    # The per-theme rounds in _render_theme_test tested each rule on its own;
+    # these test whether one policy built from all of them still predicts the
+    # same person. Round 1 runs here as well as per theme, and its picks feed
+    # the synthesis, so the policy is written from rules plus every pick made
+    # anywhere in the session.
     cmps = _round_cmps(rnd)
     if not cmps:
         st.info("No comparisons could be built. Go back and save an answer first.")
@@ -1569,9 +1808,14 @@ def render_confirm() -> None:
         if rnd < _LAST_ROUND:
             header("Comparisons",
                    f"Round {rnd} of {_LAST_ROUND} done.")
-            st.success("Your policy has been sharpened. The last round is "
-                       "scored: you will see what it decides, but nothing "
-                       "changes any more.")
+            if rnd == 1:
+                st.success("Next, one policy gets written from every rule you "
+                           "wrote and every choice you made. Then you will see "
+                           "how it decides on its own.")
+            else:
+                st.success("Your policy has been sharpened. The last round is "
+                           "scored: you will see what it decides, but nothing "
+                           "changes any more.")
             _render_policy()
             st.button(f"Start round {rnd + 1}", type="primary",
                       on_click=_advance_round)
@@ -1660,20 +1904,21 @@ def render_confirm() -> None:
 # Step 4: Output
 # ---------------------------------------------------------------------------
 
-def _start_edit(sid) -> None:
-    """From the review page: jump back to the respond step for one saved answer."""
-    ss = st.session_state
-    idx = next((i for i, s in enumerate(ss.sb_scenarios) if s["id"] == sid), None)
-    if idx is None:
+def _start_edit(theme: str) -> None:
+    """From the review page: reopen a theme's workspace to revise its rule.
+
+    This used to call _goto("respond"), a step key removed when the flow became
+    theme-first. goto_key no-ops on an unknown key, so the button set the
+    editing state and then went nowhere.
+    """
+    ans = _theme_answer(theme)
+    if not ans:
         return
-    ans = next((a for a in ss.sb_answers if a["scenario_id"] == sid), None)
-    ss["sb_edit_prev_idx"] = ss.sb_idx
-    ss["sb_editing_sid"] = sid
-    ss.sb_idx = idx
-    ss[f"sb_answer_{idx}"] = (ans or {}).get("ideal_behavior", "")
-    ss.pop(f"sb_fb_{idx}", None)
-    _goto("respond")
-    store.log_event(_rid(), "output", "edit_start", {"scenario_id": sid})
+    idx = _theme_index(theme)
+    st.session_state[f"sb_answer_{idx}"] = ans.get("ideal_behavior", "")
+    _open_theme(theme)
+    _goto("themes")
+    store.log_event(_rid(), "output", "edit_start", {"theme": theme})
 
 
 def _submit_all() -> None:
@@ -1719,14 +1964,13 @@ def render_output() -> None:
             f'</div>', unsafe_allow_html=True)
 
     if not ss.get("sb_submitted"):
-        section("Revise before you submit")
-        titles = {a["scenario_id"]: a["title"] for a in ss.sb_answers}
-        pick = st.selectbox("Pick an answer to revise",
-                            options=list(titles.keys()),
-                            format_func=lambda sid: titles[sid],
-                            key="sb_edit_pick")
-        st.button("Edit this answer", type="secondary",
-                  on_click=_start_edit, args=(pick,))
+        themes = [a["theme"] for a in ss.sb_answers if a.get("theme")]
+        if themes:
+            section("Revise before you submit")
+            pick = st.selectbox("Pick a rule to revise", options=themes,
+                                key="sb_edit_pick")
+            st.button("Edit this rule", type="secondary",
+                      on_click=_start_edit, args=(pick,))
 
     decisive = [c for c in ss.sb_confirm if c.get("choice") in ("A", "B")]
     if decisive:

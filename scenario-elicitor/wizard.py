@@ -87,7 +87,8 @@ def init() -> None:
     # menu; the whole `themes` step routes on it. sb_tphase moves the workspace
     # from writing the rule to the comparisons that test it.
     ss.setdefault("sb_theme", None)
-    ss.setdefault("sb_tphase", "write")      # "write" | "compare"
+    ss.setdefault("sb_tphase", "write")      # "write" | "test"
+    ss.setdefault("sb_tround", 1)            # round within a theme's testing loop
     ss.setdefault("sb_themes_done", [])      # theme names with a saved rule
     ss.setdefault("sb_examples", {})        # case_id -> {"text": ...} example cache
     ss.setdefault("sb_cidx", 0)             # position within the current round

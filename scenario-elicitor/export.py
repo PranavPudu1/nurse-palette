@@ -52,7 +52,6 @@ def build_artifact(*, agent: str, frame: dict, description: str, audience: str,
                      "n_revisions": a.get("n_revisions", 0),
                      "rule_versions": a.get("rule_versions", []),
                      "n_tests": a.get("n_tests", 0),
-                     "why": a.get("why", ""),
                      "reflection": a.get("reflection", [])}
                     for a in answers],
         "confirmations": [{"theme": c.get("theme", ""),
