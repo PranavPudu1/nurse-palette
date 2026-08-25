@@ -41,7 +41,7 @@ def run_theme(layout):
     at.text_input(key="gate_code").set_value("TEST").run(); click(at, "Enter")
     at.text_input(key="gate_name").set_value("L").run(); click(at, "Begin")
     click(at, "Continue")
-    at.text_input(key="sb_audience_input").set_value("my child, age 10").run()
+    at.selectbox(key="sb_age_input").set_value("9-12").run()
     click(at, "Continue")
     ss = at.session_state
     click(at, "Write a rule for this")
@@ -112,7 +112,7 @@ at.text_input(key="gate_code").set_value(os.environ.get("ACCESS_CODE", "HAILAB25
 click(at, "Enter")
 at.text_input(key="gate_name").set_value("Real").run(); click(at, "Begin")
 click(at, "Continue")
-at.text_input(key="sb_audience_input").set_value("my child, age 10").run()
+at.selectbox(key="sb_age_input").set_value("9-12").run()
 for _w in [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]:
     at.text_area(key=_w.key).set_value("I want her told, gently.").run()
 click(at, "Continue")

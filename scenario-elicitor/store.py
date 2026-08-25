@@ -172,6 +172,7 @@ def log_event(rid: str, step: str, kind: str, payload: dict | None = None) -> No
 _SNAPSHOT_KEYS = {
     "sb_step", "sb_step_key", "sb_condition",
     "sb_theme", "sb_tphase", "sb_themes_done", "sb_tcidx", "sb_tround",
+    "resp_child_age", "sb_age_input", "sb_name_input",
     "sb_rqi",
     "sb_agent", "sb_frame", "sb_desc", "sb_audience", "sb_scenarios",
     "sb_next_id", "sb_idx", "sb_answers", "sb_examples", "sb_cidx", "sb_confirm",

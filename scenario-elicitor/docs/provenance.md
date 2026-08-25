@@ -25,6 +25,10 @@ with no source is worth knowing about too.
 
 | Decision | Where you see it | Why | Source |
 |---|---|---|---|
+| Two reflective questions are asked at setup, before any case exists | The page after sign-up, under the child's age | Every other question in the tool hangs off a situation we generated, so the first thing a participant considers is our material. These come first and are about them and their child, so what they bring to the cases is their own. Min: "it might be even before they see the specific case... maybe add a few more questions when you ask about name and tell me about your kid" | Min's meeting, 22 Aug |
+| The setup page asks only the child's age and, optionally, their name | Same page | The age is already collected at sign-up, so asking who the agent is for in free text asked the same thing twice. The name, when given, goes into the generated situations so they read "Maya asks" rather than "the child asks" | ours, from Pranav's review |
+| Questions carry no type label and no card around them | Every question in the tool | Each sat in a bordered card with a pill naming its Socratic type, a provenance icon and a red "needed" tag: four pieces of chrome around one sentence, and the type names our taxonomy rather than the participant's task. The type is still recorded in the data | ours, from Pranav's review |
+| Validation counts questions rather than naming them | Under the save and next buttons | The message used to list the Socratic type names, which pointed at nothing on screen once the labels were removed | ours |
 | Topics come from eight named parent concerns, not from us | The theme menu, eight cards | Parents were interviewed about real child-chatbot transcripts and their worries were coded into eight themes. Using them means the tool covers what parents actually raised rather than what we assumed | Driscoll Table 3 |
 | Each theme shows a plain description and how many of 24 parents raised it | Under each theme name | The paper's labels ("Wrong Approach to Delivery") mean nothing to someone who has not read it, and the count is what makes the menu read as findings rather than our opinion | Driscoll Table 3 |
 | One rule per theme, written across three cases | The workspace: three cases, one rule box | A rule written for a single case is a local reaction. Writing one rule that must hold across three makes it a general principle with concrete examples under it | ours, from Min's review |
@@ -69,6 +73,7 @@ with no source is worth knowing about too.
 
 | Decision | Where you see it | Why | Source |
 |---|---|---|---|
+| No nested scrolling anywhere in the workspace | Every layout | Panes with a fixed height smaller than their own contents put a second scrollbar inside the page, so on one layout the answer boxes sat below the fold of a pane with no sign they were there. The only pane that still scrolls is the test transcript, which grows without bound | ours, from Pranav's review |
 | Every generated artifact carries an info icon | The small "i" beside each | A participant can see what produced anything on screen and where the method came from. Also how we keep ourselves honest about what is borrowed | ours |
 | Session state is snapshotted after every interaction | Not visible; the resume code | Someone can leave and come back, and a crash does not lose a session | ours |
 | Sessions saved before the theme restructure reset to the theme menu | Only if resuming an old code | Per-case answers cannot honestly be reshaped into per-theme ones, so the old work is cleared with an explanation rather than half-restored | ours |

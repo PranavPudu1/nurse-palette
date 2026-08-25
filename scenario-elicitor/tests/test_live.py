@@ -123,7 +123,7 @@ at.run()
 at.text_input(key="gate_code").set_value("TEST").run(); click(at, "Enter")
 at.text_input(key="gate_name").set_value("LIVE").run(); click(at, "Begin")
 click(at, "Continue")
-at.text_input(key="sb_audience_input").set_value(AUD).run()
+at.selectbox(key="sb_age_input").set_value("9-12").run()
 for w in [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]:
     at.text_area(key=w.key).set_value("I want to be told, gently.").run()
 click(at, "Continue")

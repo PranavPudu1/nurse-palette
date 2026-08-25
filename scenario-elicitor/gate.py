@@ -81,8 +81,13 @@ def _begin_new() -> None:
     ss["resp_name"] = name
     ss["sb_condition"] = cond
     # Seed the audience so the cases are concrete about the child from the start.
-    if child_age != CHILD_AGES[0] and not (ss.get("sb_audience") or "").strip():
-        ss["sb_audience"] = f"my child, age {child_age}"
+    if child_age != CHILD_AGES[0]:
+        # Carried so the next page can prefill rather than ask again. It used to
+        # only seed a free-text audience field, which the participant then had
+        # to answer a second time in their own words.
+        ss["resp_child_age"] = child_age
+        if not (ss.get("sb_audience") or "").strip():
+            ss["sb_audience"] = f"my child, age {child_age}"
     ss.pop("_gate_error", None)
     store.log_event(rid, "gate", "session_start",
                     {"is_test": bool(ss.get("resp_test")),
@@ -149,6 +154,7 @@ def _begin_demo() -> None:
     # demographics form there is nothing else to derive it from.
     if not (ss.get("sb_audience") or "").strip():
         ss["sb_audience"] = "my child, age 9-12"
+    ss["resp_child_age"] = "9-12"
     ss.pop("_gate_error", None)
     store.log_event(rid, "gate", "session_start",
                     {"is_test": True, "prolific": False, "child_age": "",

@@ -127,36 +127,48 @@ def render_agent() -> None:
 # ---------------------------------------------------------------------------
 
 def render_describe() -> None:
+    """One page: who the child is, then two questions about them.
+
+    This used to open with a restatement of the agent, a card explaining what
+    the next step would do, a free-text "who is this agent for", and an optional
+    "how it should behave" box. The age was already collected at sign-up, so the
+    audience question asked the same thing twice, and none of the explanatory
+    text told the person anything they needed in order to answer.
+
+    What is left is the two things we do not already know, and the questions.
+    """
     ss = st.session_state
     if ss.sb_frame is None and ss.sb_agent.strip():
         with st.spinner("Reading the agent..."):
             ss.sb_frame = llm.frame_agent(ss.sb_agent)
-    frame = ss.sb_frame or {}
-    header("How should it behave, and who is it for?",
-           f"You are setting preferences for {frame.get('restated_agent', ss.sb_agent)}.")
-    if frame.get("does"):
-        st.markdown(f'<div class="np-card-muted" style="margin-bottom:12px;">'
-                    f'This agent {frame["does"]} Say who it is for and how you want it '
-                    f'to behave. The next step turns that into concrete cases to react '
-                    f'to.</div>', unsafe_allow_html=True)
-    _mock_note(frame)
 
-    ss.setdefault("sb_audience_input", ss.sb_audience)
-    st.text_input("Who is this agent for?", key="sb_audience_input",
-                  placeholder="e.g. my 9-year-old, myself, my whole team",
-                  help="Who the agent acts for. Naming this makes the cases concrete "
-                       "about the right audience.")
-    ss.sb_audience = ss.sb_audience_input
+    header("About your child",
+           "So the situations we show you are about the right child.")
 
-    ss.setdefault("sb_desc_input", ss.sb_desc)
-    st.text_area("How it should behave (optional)", key="sb_desc_input", height=150,
-                 placeholder="Write freely, or leave blank and go straight to the "
-                             "cases.",
-                 help="Optional. Anything you write here steers the cases we generate "
-                      "next. Mention what matters, what it should never do, or when it "
-                      "should check with you. You can also skip this.")
-    ss.sb_desc = ss.sb_desc_input
+    known = (ss.get("resp_child_age") or "").strip()
+    ages = ["6-8", "9-12", "13-15", "16-18"]
+    ss.setdefault("sb_age_input", known if known in ages else "9-12")
+    c1, c2 = st.columns([1, 1.4], gap="medium")
+    with c1:
+        st.selectbox("How old is your child?", ages, key="sb_age_input",
+                     index=ages.index(ss["sb_age_input"]))
+    with c2:
+        st.text_input("Their name, if you want to use it", key="sb_name_input",
+                      placeholder="optional")
+
+    name = (ss.get("sb_name_input") or "").strip()
+    age = ss.get("sb_age_input") or "9-12"
+    # The name, when given, goes into the audience string so the generated
+    # situations say "Maya asks..." rather than "the child asks...". That is the
+    # whole reason to collect it.
+    ss.sb_audience = (f"{name}, my child, age {age}" if name
+                      else f"my child, age {age}")
+
     _render_intake_questions()
+    slots = _intake_slots()
+    missing = [k for k, _ in slots if not _answered(k)]
+    if slots and missing:
+        st.caption(_needs(len(missing), len(slots)))
 
 
 def _intake_slots() -> list[tuple[str, str]]:
@@ -581,26 +593,24 @@ def _answered(key: str) -> bool:
 
 
 def _render_one_question(key: str, label: str, text: str, info_key: str) -> None:
-    """A question card with its own provenance icon, plus an answer box.
+    """A question and a box to answer it in. Nothing else.
 
-    The icon differs per item on purpose: the probe is a counterfactual from an
-    interview method, the others are Socratic types from a taxonomy, and a
-    reader should be able to tell which is which.
+    Each question used to sit in a bordered card carrying a pill with its
+    Socratic type ("Probing assumptions"), a provenance icon, and a red "needed"
+    tag, with the answer box floating underneath. Four pieces of chrome around
+    one sentence, and the type name means nothing to a parent: it labels our
+    taxonomy, not their task. The type is still recorded in the data, where it
+    is actually used.
 
-    The answer box is a text_area, not a text_input. It was a single line, which
-    showed roughly the first eight words of an answer and hid the rest behind a
-    cursor, so people could not read back what they had written.
+    What is left is the question, styled as the box's own label so the two read
+    as one control, and the box. `label` is kept in the signature because
+    callers pass it and _question_slots uses it for validation messages.
+
+    The answer box is a text_area, not a text_input, which showed roughly the
+    first eight words and hid the rest behind the cursor.
     """
-    done = _answered(key)
-    mark = ("" if done else
-            '<span class="np-pill" style="background:#F4E6E1;color:#B0472F;">'
-            'needed</span>')
-    st.markdown(
-        f'<div class="np-card" style="margin-bottom:6px;">'
-        f'<span class="np-pill">{label}</span>{provenance.icon(info_key)}{mark}'
-        f'<div class="np-sub" style="margin-top:6px;">{text}</div></div>',
-        unsafe_allow_html=True)
-    _kept_text(key, "Your thoughts", height=90,
+    st.markdown(f'<div class="np-q">{text}</div>', unsafe_allow_html=True)
+    _kept_text(key, text, height=88,
                placeholder="a sentence or two is plenty",
                label_visibility="collapsed")
 
@@ -628,6 +638,22 @@ def _question_slots(idx: int, slot: str) -> list[tuple[str, str]]:
 
 def _unanswered(idx: int, slot: str) -> list[str]:
     return [label for key, label in _question_slots(idx, slot) if not _answered(key)]
+
+
+def _needs(n_missing: int, n_total: int) -> str:
+    """The message shown when questions are still blank.
+
+    Counts, not names. The names were the Socratic type of each question
+    ("Probing assumptions"), which labelled our taxonomy rather than anything on
+    screen, so a message listing them pointed at nothing the person could see.
+    """
+    if not n_missing:
+        return ""
+    if n_missing == n_total:
+        return ("Answer both questions to continue." if n_total == 2
+                else f"Answer all {n_total} questions to continue.")
+    return ("One question still needs an answer." if n_missing == 1
+            else f"{n_missing} questions still need an answer.")
 
 
 def _render_reflection(idx: int, slot: str, questions: list[dict]) -> None:
@@ -1122,8 +1148,16 @@ def _render_layout_switcher() -> None:
 
 # ---- the pieces every layout is built from --------------------------------
 
-def _ui_cases(cases: list[dict], height: int) -> None:
-    """The theme's cases as conversations, in tabs, in a fixed-height pane."""
+def _ui_cases(cases: list[dict]) -> None:
+    """The theme's cases as conversations, one per tab.
+
+    No fixed-height container. Each case used to sit in one, which put a second
+    scrollbar inside the page: the situation was at the top and the exchange
+    below the fold, so reading the conversation meant scrolling a pane rather
+    than looking at the screen. A tab shows one case at a time, and one case is
+    short enough to fit.
+
+    """
     st.markdown(f'<div class="np-section-title">The conversations'
                 f'{provenance.icon("case")}</div>', unsafe_allow_html=True)
     if not cases:
@@ -1132,9 +1166,8 @@ def _ui_cases(cases: list[dict], height: int) -> None:
     tabs = st.tabs([f"Case {i + 1}" for i in range(len(cases))])
     for tab, sc in zip(tabs, cases):
         with tab:
-            with st.container(height=height, border=False):
-                st.markdown(_situation_card(sc), unsafe_allow_html=True)
-                _render_example_chat(sc)
+            st.markdown(_situation_card(sc), unsafe_allow_html=True)
+            _render_example_chat(sc)
 
 
 def _ui_before(idx: int, scenario: dict) -> None:
@@ -1203,7 +1236,7 @@ def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
               use_container_width=True, disabled=bool(missing) or no_rule,
               on_click=_save_theme_rule, args=(theme, cases))
     if missing:
-        st.caption("Answer these before saving: " + ", ".join(missing) + ".")
+        st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
     elif no_rule:
         st.caption("Write your rule to continue.")
 
@@ -1246,14 +1279,14 @@ def _render_stage_nav(idx: int) -> None:
                   disabled=bool(missing),
                   on_click=_set_stage, args=(idx, cur + 1))
     if missing:
-        st.caption("Answer these first: " + ", ".join(missing) + ".")
+        st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
 
 
 # ---- the four layouts ------------------------------------------------------
 
 def _layout_a(idx, theme, cases, scenario) -> None:
     """Staged: the case is pinned and one working block sits under it."""
-    _ui_cases(cases, 250)
+    _ui_cases(cases)
     st.divider()
     _render_stage_rail(idx)
     cur = _stage(idx)
@@ -1289,36 +1322,46 @@ def _layout_b(idx, theme, cases, scenario) -> None:
     with scores:
         _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
     with middle:
-        _ui_cases(cases, 240)
+        _ui_cases(cases)
         _ui_rule(idx, height=170)
     with asks:
-        with st.container(height=520, border=False):
-            _ui_before(idx, scenario)
-            _ui_after(idx)
+        _ui_before(idx, scenario)
+        _ui_after(idx)
     _ui_save(theme, cases, idx)
 
 
+# How the two columns split, by stage. The case stays on the left throughout,
+# but it does not need half the screen while someone is typing three answers
+# into the other half, so the working column widens where the work is.
+_C_SPLIT = {0: [1, 1.7], 1: [1, 1.3], 2: [1, 1.3]}
+
+
 def _layout_c(idx, theme, cases, scenario) -> None:
-    """Split: the case owns the left half and never changes."""
+    """Split: the case holds the left, the work steps down the right.
+
+    The right column used to be a fixed-height scrolling container that was
+    shorter than its own contents, so on the first stage the answer boxes sat
+    below a nested scrollbar and there was no way to tell they were there.
+    Nothing here scrolls inside the page any more.
+    """
     ss = st.session_state
-    left, right = st.columns([1, 1.4], gap="medium")
+    cur = _stage(idx)
+    left, right = st.columns(_C_SPLIT[cur], gap="medium")
     with left:
-        _ui_cases(cases, 560)
+        _ui_cases(cases)
     with right:
         _render_stage_rail(idx)
-        cur = _stage(idx)
-        with st.container(height=470, border=False):
-            if cur == 0:
-                _ui_before(idx, scenario)
-            elif cur == 1:
-                _ui_rule(idx, height=200)
-                _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
-                               (ss.get(f"sb_answer_{idx}") or "").strip())
-            else:
-                _ui_after(idx)
-                _render_version_compare(idx, scenario,
-                                        (ss.get(f"sb_answer_{idx}") or "").strip())
-                _ui_tried(idx, cases, 200)
+        if cur == 0:
+            _ui_before(idx, scenario)
+        elif cur == 1:
+            _ui_rule(idx, height=190)
+            _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
+                           (ss.get(f"sb_answer_{idx}") or "").strip())
+        else:
+            _ui_after(idx)
+            _render_version_compare(idx, scenario,
+                                    (ss.get(f"sb_answer_{idx}") or "").strip())
+            _ui_tried(idx, cases, 200)
         _render_stage_nav(idx)
         if cur == len(_STAGES) - 1:
             _ui_save(theme, cases, idx)
@@ -1327,26 +1370,22 @@ def _layout_c(idx, theme, cases, scenario) -> None:
 def _layout_d(idx, theme, cases, scenario) -> None:
     """Conversation-led: the chat is the page, the work docks beneath it."""
     ss = st.session_state
-    _ui_cases(cases, 330)
+    _ui_cases(cases)
     st.divider()
     t_ask, t_rule, t_score, t_ver = st.tabs(
         ["Questions", "Your rule", "Score", "Versions"])
     with t_ask:
-        with st.container(height=300, border=False):
-            _ui_before(idx, scenario)
-            _ui_after(idx)
+        _ui_before(idx, scenario)
+        _ui_after(idx)
     with t_rule:
-        with st.container(height=300, border=False):
-            _ui_rule(idx, height=180)
-            _ui_tried(idx, cases, 200)
+        _ui_rule(idx, height=180)
+        _ui_tried(idx, cases, 200)
     with t_score:
-        with st.container(height=300, border=False):
-            _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
-                           (ss.get(f"sb_answer_{idx}") or "").strip())
+        _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
+                       (ss.get(f"sb_answer_{idx}") or "").strip())
     with t_ver:
-        with st.container(height=300, border=False):
-            _render_version_compare(idx, scenario,
-                                    (ss.get(f"sb_answer_{idx}") or "").strip())
+        _render_version_compare(idx, scenario,
+                                (ss.get(f"sb_answer_{idx}") or "").strip())
     _ui_save(theme, cases, idx)
 
 
@@ -1364,7 +1403,7 @@ def _layout_o(idx, theme, cases, scenario) -> None:
     with scores:
         _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
     with middle:
-        _ui_cases(cases, 430)
+        _ui_cases(cases)
         st.write("")
         _ui_rule(idx, height=170)
         _ui_tried(idx, cases, 300)

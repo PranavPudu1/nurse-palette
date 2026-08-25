@@ -142,6 +142,13 @@ details, .stExpander {{ border-radius: 12px !important; }}
    Opens on hover (desktop), :active (touch press) and :focus / :focus-within
    (tab, and most touch browsers focus on tap). No JS, since Streamlit renders
    this through its markdown pipeline where scripts do not run. */
+/* A question, styled as the label of the box beneath it so the pair reads as
+   one control rather than a card followed by an orphaned input. */
+.np-q {{
+    font-size: 13.5px; line-height: 1.45; color: {FG}; font-weight: 500;
+    margin: 12px 0 4px;
+}}
+
 .np-info {{
     display: inline-flex; align-items: center; justify-content: center;
     width: 15px; height: 15px; margin-left: 6px; vertical-align: middle;
