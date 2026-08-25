@@ -151,14 +151,6 @@ def _mock_case(theme: str, does: str, audience: str, i: int) -> dict:
     }
 
 
-def generate_scenarios(agent: str, does: str, description: str, audience: str,
-                       n: int = 6) -> dict:
-    themes = ["everyday requests", "tricky edge cases", "conflicts and limits"]
-    scenarios = [_mock_case(themes[i % len(themes)], does, audience, i)
-                 for i in range(n)]
-    mock = {"scenarios": scenarios}
-    return _call(prompts.scenarios_messages(agent, does, description, audience, n),
-                 prompts.SCENARIOS_SCHEMA, mock, temperature=0.7)
 
 
 def expand_theme(agent: str, does: str, description: str, audience: str, theme: str,
@@ -178,31 +170,8 @@ def expand_theme(agent: str, does: str, description: str, audience: str, theme: 
         prompts.SCENARIOS_SCHEMA, mock, temperature=0.8)
 
 
-def clarifying_situations(agent: str, does: str, description: str, audience: str,
-                          answers: list[dict], n: int = 3) -> dict:
-    scenarios = []
-    for j in range(n):
-        s = _mock_case("Tests your answers", does, audience, 200 + j)
-        s["kind"] = "surprising"
-        s["title"] = f"Tests your answers {j + 1}"
-        s["situation"] = (f"A concrete case (#{j + 1}) built to probe where your "
-                          f"earlier answers are ambiguous (placeholder example).")
-        s["at_stake"] = "which of your stated preferences wins when they collide"
-        scenarios.append(s)
-    mock = {"scenarios": scenarios}
-    return _call(
-        prompts.clarifying_situations_messages(agent, does, description, audience,
-                                               answers, n),
-        prompts.SCENARIOS_SCHEMA, mock, temperature=0.7)
 
 
-def example_behavior(agent: str, does: str, description: str, audience: str,
-                     scenario: dict) -> dict:
-    mock = {"text": ("The agent handles it directly, keeps the person informed, and "
-                     "flags anything sensitive for them to confirm.")}
-    return _call(
-        prompts.example_behavior_messages(agent, does, description, audience, scenario),
-        prompts.EXAMPLE_SCHEMA, mock, temperature=0.6)
 
 
 def rubric_feedback(agent: str, does: str, description: str, audience: str,

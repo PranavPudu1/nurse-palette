@@ -19,7 +19,8 @@ def check(c, m):
 
 src = {f: (pathlib.Path(APP) / f).read_text()
        for f in ("steps.py", "llm.py", "prompts.py", "store.py", "export.py",
-                 "provenance.py", "README.md")}
+                 "provenance.py", "README.md",
+                 "docs/provenance.md", "docs/design-rationale.md")}
 
 print("=== removed features stay removed ===")
 for f, s in src.items():
@@ -111,6 +112,19 @@ check(rule is not None, "columns are told not to clip")
 sel = (rule.group(1).split("*/")[-1] if rule else "")
 check("stHorizontalBlock" in sel and "olumn" in sel, "the rule targets columns")
 check("stVerticalBlock" not in sel, "and spares the scrolling containers")
+
+print("=== the docs describe the tool as it is ===")
+# A doc that documents a feature we removed is worse than no doc: it is what
+# Min would be reading when she asks why she cannot find the button.
+for doc in ("docs/provenance.md", "docs/design-rationale.md"):
+    d = src[doc]
+    check("| Decision | Where you see it | Why | Source |" in d or "## " in d,
+          f"{doc}: has the expected shape")
+    for gone in ("Missing the real meaning", "Risky delivery",
+                 "Harmful intention", "seven themes", "Surface more"):
+        check(gone not in d, f"{doc}: no stale reference to {gone!r}")
+check("Where you see it" in src["docs/provenance.md"],
+      "provenance.md uses the four-field form")
 
 print("=== answers survive a widget unmounting ===")
 check("_kept_text" in src["steps.py"], "the persistence helper exists")

@@ -1,165 +1,152 @@
-# Design rationale: the rubric and the pairwise generation
+# Design rationale
 
-How the two core generative components of the Scenario Elicitor are designed, what
-papers informed them, and where we deliberately depart. Written for the lab
-(Min); citations use section and page numbers of the camera-ready PDFs.
+Four components need more than a table row, because the reasoning behind them is
+what a reviewer will ask about. Everything else is in
+[provenance.md](provenance.md).
 
-**Papers**
-
-- **iRULER**: Bai, J., Cheong, W. S., Muller, P., and Lim, B. Y. 2026. iRULER:
-  Intelligible Rubric-Based User-Defined LLM Evaluation for Revision. CHI '26.
-  https://doi.org/10.1145/3772318.3790539
-- **Parents**: Driscoll, J., Chen, Y., Shi, V., Vucharatavintara, I., Yao, Y.,
-  and Jin, H. 2026. Understanding Parents' Desires in Moderating Children's
-  Interactions with GenAI Chatbots through LLM-Generated Probes. CHI '26.
-  https://doi.org/10.1145/3772318.3791622
-- **ICAI**: Findeis, A., Kaufmann, T., Hullermeier, E., Albanie, S., and
-  Mullins, R. 2025. Inverse Constitutional AI: Compressing Preferences into
-  Principles. ICLR 2025.
+Sources are cited there. Current as of v0.4.
 
 ---
 
-## 1. The rubric
+## 1. Why a rubric at all
 
-### Goal
+**The problem.** A blank box produces vague rules. A pre-filled AI answer
+produces agreement: people accept what is in front of them.
 
-When a person authors "the ideal behavior the agent should take" for a concrete
-case, a blank text box produces vague, incomplete statements, and a pre-filled AI
-answer produces agreement bias (people accept whatever is there). The rubric is
-the middle path: the person writes in their own words, and the system evaluates
-the draft against explicit criteria so they can see what is missing and revise.
-The rubric also turns each authored behavior into structured data (per-criterion
-levels and a weighted score) we can analyze later.
+**What we do.** The person writes in their own words, and the draft is scored
+against four named criteria with four written levels each. The score is not a
+judgment of their values. It checks one narrower thing: whether the rule is
+specific enough that an agent could follow it. A rule can be exactly right about
+what someone wants and still be unusable.
 
-### How iRULER informed it
+**Where it comes from.** The structure is iRULER's: named criteria, ordinal
+levels described in terms of observable evidence, and a why-not-higher
+explanation attached to each. Their instrument is three unweighted booleans over
+a whole document; ours is four weighted criteria over one rule.
 
-iRULER's six design guidelines for user-defined feedback are the skeleton
-(iRULER §3, p.4): feedback should be **specific** (explicit criteria, DG1),
-**scaffolded** (a rubric with levels and weights, DG2), **justified** (why and
-why-not explanations, DG3), **actionable** (counterfactual revisions, DG4),
-**qualified** and **refinable** (the rubric itself can be judged and edited,
-DG5-6). Concretely we adopted:
+The criteria *content* is ours, synthesised from Driscoll's coded moderation
+themes. This is interpretation, not extraction: they coded what parents said
+they wanted the AI to do, and we turned recurring shapes in that into four
+dimensions a rule can be scored on. Nobody should be able to point at a table in
+that paper and find these four.
 
-1. **Structure.** Named criteria, percentage weights summing to 100, and 4
-   ordinal levels per criterion, each level a prose descriptor of observable
-   evidence (iRULER §4.1.1 p.4 and Appendix B p.25, their JSON rubric format).
-   The overall score is their weighted formula, sum(w_k x s_k)/L on a 0-100
-   scale with a color band (iRULER §4.1.1; Fig. 2 B2).
-2. **Feedback form.** Per criterion, a selected level with a **Why**
-   justification and a **Why-not-higher** justification, written in their
-   "Overall-Supporting" shape: a one-sentence overall judgment followed by
-   bullets citing concrete phrases (iRULER prompt A.1.1 steps 4-6, p.22).
-   Why-Not was the most used feature in both of their experiments (Table 4,
-   p.25), so we always include it rather than hiding it behind a click.
-3. **Actionable revision, minimally.** The "Suggest a minimal revision" button
-   targets ONE criterion (the weakest, weight-breaking ties) at its next level
-   and follows iRULER's Minimal Modification directive: "If the original text
-   already meets a criterion, do not change it" (A.1.2, pp.22-23), with a
-   rationale that ties the change to the rubric's own language. The person
-   previews and applies or ignores it; iRULER frames this review-and-select as
-   the guard against over-reliance (§7.3.1, p.16).
-4. **Seeded but editable.** iRULER's core critique is of "generic,
-   one-size-fits-all rubrics that overlook specific task goals" (§1, p.2), and
-   its position is that rubrics are "evolving rather than static templates"
-   (§1, p.2; §7.2, p.16). We therefore ship the rubric as a SEED the person can
-   edit in place (names, weights, level descriptors), with every edit logged.
-   We chose four criteria, not five: iRULER trimmed their own instrument from
-   five to four to reduce load (fn.12, p.10), and their participant R21
-   reported being overwhelmed by too many criteria (§6.4.2, p.14).
-5. **Honest non-claims.** We do not claim the rubric increases users' sense of
-   control: both iRULER experiments found no significant effect on control
-   (§6.1.3 p.12; §6.2.3 p.13). Supported claims are quality, helpfulness,
-   confidence, and fewer iterations.
+**What we removed.** iRULER offers a minimal AI revision targeting the weakest
+criterion, and we built it. It is gone. Their own participants accepted 100% of
+suggestions offered, which makes it a channel for the model's language to become
+the person's stated preference. In its place the tool quotes the person's own
+earlier answers back when their rule does not mention them.
 
-### How the Parents paper grounds each criterion's content
-
-The four criteria are not invented; each maps to an empirical finding about how
-people specify desired AI behavior:
-
-- **Specific action (30%).** Parents described ideal moderation as "the action
-  they wanted the system to take and which part of the interaction they wanted
-  changed" (Parents §4.2, p.11), with a concrete vocabulary of 14 operations
-  (Table 9, p.29). Level 4 requires both the operation and its target.
-- **Scope and boundaries (30%).** "Parents expect strong boundaries that avoid
-  seeding new ideas" (§4.2, p.14): moderation should not "expand the child's
-  option set." This criterion asks what the agent must NOT do and the condition
-  under which the answer flips. It merges our earlier separate "Boundary" and
-  "Gray area" criteria, which overlapped; iRULER's rubric-of-rubrics penalizes
-  criteria where one piece of evidence scores under multiple criteria
-  ("Criteria Alignment," Table 6, p.28).
-- **Fits the audience (20%).** The Parents paper reframes developmental fit as
-  a SAFETY property, not politeness: "if a child cannot understand the
-  vocabulary... they cannot internalize the warning, even if the content is
-  factually correct" (§4.2, p.13). Their §5.3 (p.17) lists the tunable
-  dimensions we use in the descriptors: content, tone, reading level, depth.
-- **Escalation and reasons (20%).** "Defer to Support" was the third most
-  common desired behavior (16 of 24 parents, Table 4, p.13): the agent should
-  "recognize when a situation is too serious... and defer to human support"
-  (§4.2, p.14). And explanation is mandatory even for refusals; the paper's
-  refusal code is literally "Refuse Response and Explain" (Table 9, p.29).
-
-### Deliberate departures
-
-- **Seeded rubric rather than authored from blank.** iRULER has users build
-  rubrics from an empty table with AI assists (§4.2.1, p.6). For a study
-  respondent doing a one-session task, blank-slate rubric authoring is a large
-  ask; we seed and allow editing. This implements DG1-DG4 fully and DG5-DG6 in
-  a light form.
-- **The probing question is not from iRULER.** iRULER never asks the user a
-  question; its Why/Why-Not/How-To are questions the user asks of the system.
-  Our single probing question after feedback follows the Parents paper's
-  interview method: "probing techniques to prompt elaboration, comparisons, and
-  consideration of hypothetical variations" (§3.5, p.7).
-- **No tracked-diff change cards.** iRULER renders revisions as per-change
-  accept/reject diffs (Fig. 3 g-i). Streamlit has no equivalent widget; we show
-  the full suggested revision with its rationale and a single Apply/Ignore.
-  Noted as a fidelity gap.
+**One thing found only against the real model.** Feeding the reflection answers
+into the scorer inflated it: a draft naming no audience scored level 4 on "Fits
+the audience" in two of three runs, because the model credited intent it had
+seen in the reflection rather than in the rule. The prompt now fences the draft
+as the only scorable text. The offline mock could not have surfaced this, since
+it isolates each prompt.
 
 ---
 
-## 2. The pairwise generation (confirm step)
+## 2. Why comparisons, and why three rounds twice
 
-### Goal
+**The problem.** What someone writes and what they would actually choose are
+different things. A rule can sound complete and still fail to decide a real case.
 
-An authored ideal behavior is a stated preference; stated preferences are
-unreliable at the boundary (the project's core GATE/OPEN motivation). The
-confirm step generates, for each authored case, one **concrete instance** that
-is more specific than the case (a named, near yes-or-no situation) plus two
-contrasting agent behaviors, and records which one the person prefers. Its three
-jobs: confirm what the authored behavior implies, elicit the boundary (what the
-agent should NOT do), and resolve edge cases the prose left open.
+**What we do.** Two candidate replies to one concrete moment, differing in
+exactly one respect. The person picks and says why, before seeing anything the
+model did.
 
-### Grounding
+The single-variable constraint is what makes a pick informative. If two things
+differ, a preference for one option says nothing specific. The four dimensions
+varied are the child's age or maturity, how serious the situation is, how clear
+the child's intent is, and where the risk originates; the first three are named
+in Driscoll's future work, the fourth is their system-risk/misuse-risk split.
 
-- **Instances must be more concrete than the case.** This was Min's direct
-  feedback (July meetings), matching the Parents paper's method: their probes
-  are specific single-turn incidents, and their scenario-selection kept only
-  cases parents rated realistic (median realism above 4) yet controversial
-  (concern variance above 1.0), i.e. concrete gray-area instances (§3.3, p.6).
-  An informative pair sits where reasonable people split.
-- **Vary ONE named dimension.** The Parents paper documents the context
-  variables along which the same person's desired behavior flips: the child's
-  age and maturity (§4.2 p.13, Figs. 7-8), the severity of the situation, the
-  intent behind the request ("the intention behind a prompt determined the
-  appropriateness of a response," §4.1.3 p.11), and the locus of risk (System
-  Risk vs Misuse Risk, Table 14 p.33). The generator must pick the single
-  dimension along which the authored behavior is most likely to flip, and the
-  chosen dimension is recorded in the data (`dimension` field) so we can
-  analyze coverage.
-- **No idea-seeding.** The options must not introduce new ideas or options
-  beyond the instance, mirroring the boundary expectation in Parents §4.2 p.14.
-- **Why pairwise at all: reconstruction.** ICAI validates an extracted
-  principle set by whether an LLM applying it can reproduce the original
-  pairwise annotations ("annotation reconstruction accuracy," ICAI Abstract and
-  Fig. 1). Our confirm picks are exactly the data that later lets us test
-  whether the authored behaviors predict the person's actual choices; agreement
-  between the authored statement and the confirm picks is the per-person
-  version of ICAI's metric (see docs/evaluation-metrics.md).
+**Why the rounds run twice.** They test two different claims.
 
-### Open problem (flagged, not solved)
+Per theme, right after a rule is written, the model follows *only that rule*. A
+disagreement points at a gap in that rule, and round 2 hands the rule box back so
+the person closes it in their own words. Round 3 then scores the edited rule,
+which measures whether their own revision actually worked.
 
-Choosing WHICH dimension yields the most informative pair is currently an LLM
-judgment inside the prompt. A systematic selector (for example, targeting the
-dimension with the highest expected disagreement, or cycling dimensions per
-person for coverage) is future work; Min called dimension choice "the key" in
-the July 29 discussion.
+At the end, the model follows *one policy synthesised from every rule and every
+pick*. That is the ICAI claim: if a written policy really captures what someone
+wants, a model reading only that policy should reproduce their choices. Round 3
+is frozen because agreement means nothing if the thing being measured changes
+while it is measured.
+
+**Commit before reveal, everywhere.** The reason is typed before the model's
+answer appears. Reversing that would make the reason a reaction rather than a
+view, and the agreement number would stop meaning anything.
+
+**Open problem.** Which dimension a comparison varies is chosen by the model
+inside the prompt. It is not a selector targeting expected disagreement, and it
+does not cycle to guarantee coverage. The choice is recorded per comparison so
+coverage can be analysed afterwards, but this is the weakest part of the design
+and Min has flagged it as the key one.
+
+**Second open problem.** With small round sizes, agreement can only take a few
+values. Three items means 0, 33, 67 or 100 percent, which is too coarse to
+separate two participants. Round sizes are constants so they can be raised once
+the session has been timed.
+
+---
+
+## 3. Why the case gives so little away
+
+**The problem.** Everything shown before someone writes shapes what they write.
+
+**What we do.** The case card carries a title and what happened. It used to also
+carry what was at stake, the values in tension, how it plays out, and who is
+affected. All four are gone from the screen, on Min's reading that the card was
+answering the question before the participant could.
+
+What is at stake and the competing values are still generated, and are still
+passed to the question generator — as material for questions rather than as
+prose. The same content arrives as something to think about instead of something
+to agree with. What is at stake also survives in the export, because a benchmark
+row that says what an agent should do but not what it was deciding between is
+not usable.
+
+**The baseline reply is a product, not a model.** The "before" in every
+comparison applies the safeguards a mainstream child mode ships with:
+age-appropriate wording, pointing to a trusted adult on serious topics, no
+graphic detail, a crisis resource if self-harm comes up. It has no length limit.
+It was capped at two to four sentences, which made the before-state read as
+unrepresentatively terse next to a real product, so any difference a parent saw
+after writing a rule was partly an artefact of our own instruction. This layer is
+reconstructed from behaviour these products publicly document. We do not have
+anyone's real system prompt and should never imply otherwise.
+
+---
+
+## 4. Why the workspace is shaped the way it is
+
+**The problem.** Min's finding on a screen share: while writing a rule, the
+rubric and the reflective questions were unreachable. Everything was stacked in
+one column, so by the time someone was typing, what they needed had scrolled
+away.
+
+**The constraint.** A theme must fit one viewport without the page scrolling.
+The case, its conversation, the questions, the rule box and the rubric do not fit
+together at any honest font size, so every layout has to earn space somehow.
+
+**Four prototypes**, so the choice is made from seeing rather than describing.
+**A** stages the work under a pinned case, one block at a time. **B** shows
+everything at once in three columns. **C** gives the case the left half
+permanently and steps the work down the right. **D** makes the conversation the
+page and docks the work beneath it.
+
+They share every primitive and write the same session keys, so switching cannot
+lose work and no layout can pass a check the others fail. A test asserts all four
+produce identical state from identical input. The switcher appears only in test
+sessions.
+
+**A bug the prototypes exposed.** Streamlit discards widget state as soon as a
+widget stops being rendered. In the staged layouts, moving to the next stage
+silently emptied the rule box and every answer already typed. Values now live in
+plain session keys that nothing unmounts. Worth recording because it would have
+destroyed participant work in a way nobody would have reported: the box is simply
+empty when they come back to it.
+
+**Answers are collected in text areas, not single-line inputs.** They were
+inputs, which showed roughly the first eight words and hid the rest behind the
+cursor.

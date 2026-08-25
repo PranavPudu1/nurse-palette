@@ -34,7 +34,6 @@ def _goto(key: str) -> None:
     """Jump to a step by key. Safe if this arm does not contain it."""
     wizard.goto_key(key)
 
-N_SCENARIOS = 6
 
 # Domain-general, AI-behavior example chips.
 # The domain-general agent chips. Retained deliberately: the study is locked to

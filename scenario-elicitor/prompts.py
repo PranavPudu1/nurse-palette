@@ -90,19 +90,6 @@ REPLY_SCHEMA = {
     },
 }
 
-# A single proposed agent behavior (the IRAC "conclusion"). No longer pre-filled;
-# shown only on demand as a reference in the co-writing respond step.
-EXAMPLE_SCHEMA = {
-    "name": "example_behavior",
-    "strict": True,
-    "schema": {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {"text": {"type": "string"}},
-        "required": ["text"],
-    },
-}
-
 # The seeded rubric for a good ideal-behavior answer. Structure follows iRULER
 # (Bai et al., CHI '26, DOI 10.1145/3772318.3790539): named criteria, percentage
 # weights summing to 100, and 4 ordinal levels each described as observable
@@ -445,50 +432,6 @@ def is_kids_domain(agent: str) -> bool:
     return any(k in a for k in ("child", "kid", " son", "daughter", "parent"))
 
 
-def scenarios_messages(agent: str, does: str, description: str, audience: str,
-                       n: int) -> list[dict]:
-    if is_kids_domain(agent):
-        themes = "\n".join(f"- {t['name']}: {t['desc']}" for t in KIDS_THEMES)
-        middle = (
-            f"Fan out {n} concrete, realistic CASES this agent would face where "
-            "reasonable parents could genuinely disagree about how it should "
-            "behave. Spread the cases across these themes, which come from "
-            "research on what concerns parents about children's AI use; use the "
-            "theme name as the case's category so each case shows why it is an "
-            f"important probe:\n{themes}\n\n"
-            "Each case must read like one specific incident: name the actual "
-            "content, question, or message involved (a real-sounding video, news "
-            "story, chat message, or request), the child's age, and the moment "
-            "the agent must act. The best cases are realistic AND controversial: "
-            "close calls where some parents would allow and others would block, "
-            "not clear-cut violations. Deliberately include cases a parent is "
-            "unlikely to have thought of."
-        )
-    else:
-        middle = (
-            f"Fan out {n} concrete, realistic CASES this agent would face where "
-            "reasonable people could genuinely disagree about how it should behave. "
-            "Think like a red team envisioning how it will really be used: vary the "
-            "context, the type of user, what is at stake, and the timing, and include "
-            "rare but consequential cases and ways it could be misused. Each case must "
-            "read like a specific real incident with concrete details, not a broad "
-            "topic. Deliberately surface cases the person is unlikely to have thought "
-            "of. Group them into 2 to 4 short themes, and aim for a spread of kinds "
-            "with several edge_case or surprising."
-        )
-    system = (
-        f"You help a person set preferences for how an AI agent should behave. The "
-        f"agent: {agent.strip()}. What it does: {does.strip()}."
-        f"{_audience_clause(audience)}\n\n"
-        f"{middle}\n\n{_CASE_FIELDS}\n{_CASE_QUALITY}\nDo not use em dashes."
-    )
-    user = (
-        "How the person described what they want (may be brief or empty):\n"
-        f"\"\"\"\n{(description or '').strip()}\n\"\"\"\n\n"
-        f"Generate {n} concrete cases."
-    )
-    return [{"role": "system", "content": system},
-            {"role": "user", "content": user}]
 
 
 def expand_theme_messages(agent: str, does: str, description: str, audience: str,
@@ -516,61 +459,8 @@ def expand_theme_messages(agent: str, does: str, description: str, audience: str
             {"role": "user", "content": user}]
 
 
-def clarifying_situations_messages(agent: str, does: str, description: str,
-                                   audience: str, answers: list[dict],
-                                   n: int) -> list[dict]:
-    lines = []
-    for a in answers:
-        sit = (a.get("situation") or "").strip()
-        beh = (a.get("ideal_behavior") or "").strip()
-        if not (sit and beh):
-            continue
-        lines.append(f"- Case: {sit}\n  Ideal behavior: {beh}")
-    made = "\n".join(lines) or "(no authored answers yet)"
-    system = (
-        f"You help a person set preferences for how an AI agent should behave. The "
-        f"agent: {agent.strip()}. What it does: {does.strip()}."
-        f"{_audience_clause(audience)}\n\n"
-        "Below are cases the person already handled, each with the ideal behavior "
-        "they authored. Study them as a set and find where their stated preferences "
-        f"are still ambiguous, under-determined, or in tension. Then write {n} NEW "
-        "concrete cases designed to resolve that ambiguity: each should pit the "
-        "unclear values against each other so the person's next answer pins down "
-        "what they actually want, and must not be already settled by the answers "
-        "below. Use 'Tests your answers' as the category and 'surprising' as the "
-        f"kind.\n\n{_CASE_FIELDS}\n{_CASE_QUALITY}\nDo not use em dashes."
-    )
-    user = (
-        "How the person described what they want (may be brief or empty):\n"
-        f"\"\"\"\n{(description or '').strip()}\n\"\"\"\n\n"
-        f"Answers so far:\n{made}\n\n"
-        f"Generate {n} concrete cases that test these answers."
-    )
-    return [{"role": "system", "content": system},
-            {"role": "user", "content": user}]
 
 
-def example_behavior_messages(agent: str, does: str, description: str,
-                              audience: str, scenario: dict) -> list[dict]:
-    system = (
-        f"An AI agent ({agent.strip()}: {does.strip()}) is facing a specific case."
-        f"{_audience_clause(audience)} Write ONE reasonable, concrete way the agent "
-        "could respond in this case, as a starting point a thoughtful person could "
-        "accept as-is or edit. Describe what the agent actually does or says in two "
-        "to four sentences. Aim for a sensible, common-ground response, not an "
-        "extreme one. Do not use em dashes."
-    )
-    cons = ", ".join(scenario.get("considerations") or [])
-    ctx = ((f"\n\nWhat the person said they want (for context):\n"
-            f"\"\"\"\n{description.strip()}\n\"\"\"") if (description or "").strip()
-           else "")
-    user = (
-        f"Case ({scenario.get('title', '')}):\n{scenario.get('situation', '')}\n"
-        f"What has to be decided: {scenario.get('at_stake', '')}\n"
-        f"Things to weigh: {cons}{ctx}"
-    )
-    return [{"role": "system", "content": system},
-            {"role": "user", "content": user}]
 
 
 def _reflection_text(reflection: list[dict] | None) -> str:
