@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Local study data (the app writes its SQLite DB to DATA_DIR)
+*.db
+*.db-wal
+*.db-shm

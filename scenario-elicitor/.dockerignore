@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+data/
+docs/
+.dockerignore
+Dockerfile
+README.md
+lit-review-starter.md
