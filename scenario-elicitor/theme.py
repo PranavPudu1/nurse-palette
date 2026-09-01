@@ -200,6 +200,24 @@ details, .stExpander {{ border-radius: 12px !important; }}
 .np-tip b ~ b {{ margin-top: 9px; }}
 .np-tip i {{ font-style: normal; color: {MUTED_FG}; }}
 
+/* Narrow-viewport note: invisible on desktop, shown when columns stack.
+   The workspace is designed for one desktop viewport; on a phone the split
+   stacks vertically and this note manages expectations. Full mobile design
+   is deferred until Winnie says whether parents would really use a phone. */
+.np-mobile-note {{ display: none; }}
+@media (max-width: 700px) {{
+    .np-mobile-note {{
+        display: block;
+        background: {SURFACE_BG};
+        border: 1px solid {BORDER};
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 13px;
+        color: {MUTED_FG};
+        margin-bottom: 10px;
+    }}
+}}
+
 header[data-testid="stHeader"] {{ background: transparent; }}
 #MainMenu {{ visibility: hidden; }}
 footer {{ visibility: hidden; }}

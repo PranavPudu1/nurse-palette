@@ -279,18 +279,6 @@ def _append_new(items: list[dict]) -> int:
     return added
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 def _kind_badge(kind: str) -> str:
     if kind not in ("edge_case", "surprising"):
         return ""
@@ -299,8 +287,6 @@ def _kind_badge(kind: str) -> str:
             f'border-radius:999px;background:{ACCENT};color:{FG};font-size:10px;'
             f'font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">'
             f'{label}</span>')
-
-
 
 
 def _situation_card(s: dict) -> str:
@@ -431,7 +417,7 @@ def _run_test(idx: int, scenario: dict, rule: str) -> None:
                   "version": f"Your rule v{n}", "rule": rule, "tested": True,
                   "what_changed": (data.get("what_changed") or "").strip(),
                   "_mock": data.get("_mock"), "_error": data.get("_error")})
-    store.log_event(_rid(), "respond", "test_rule",
+    store.log_event(_rid(), "themes", "test_rule",
                     {"case_idx": idx, "version": n, "rule": rule,
                      "reply": turns[-1]["content"]})
 
@@ -452,7 +438,7 @@ def _run_followup(idx: int, scenario: dict, rule: str, msg: str) -> None:
                               else ("Following your rule" if rule else "No rule yet")),
                   "rule": rule, "tested": False, "what_changed": "",
                   "_mock": data.get("_mock"), "_error": data.get("_error")})
-    store.log_event(_rid(), "respond", "continue_chat",
+    store.log_event(_rid(), "themes", "continue_chat",
                     {"case_idx": idx, "message": msg, "reply": turns[-1]["content"]})
 
 
@@ -483,12 +469,9 @@ def _render_scenario_chat(idx: int, scenario: dict) -> None:
                   on_change=_request_followup, args=(idx,))
 
 
-
-
 # ---------------------------------------------------------------------------
 # Step 3: Respond (co-writing: draft -> rubric feedback -> optional apply)
 # ---------------------------------------------------------------------------
-
 
 
 def _flag(name: str) -> None:
@@ -548,8 +531,6 @@ def _record_answer(scenario: dict, theme: str = "",
     else:
         ss.sb_answers.append(answer)
         store.log_event(_rid(), "themes", "answer_save", answer)
-
-
 
 
 _SCORE_BANDS = [(85, "Excellent", "#2E7D4F"), (70, "Good", "#8A6D1B"),
@@ -695,29 +676,6 @@ def _reflection_answers(idx: int) -> list[dict]:
     return out
 
 
-def _render_feedback(fb: dict, rubric: list[dict]) -> None:
-    """Weighted score badge + per-criterion Why / Why-not-higher expanders."""
-    levels = _levels_by_name(fb)
-    score = prompts.overall_score(rubric, levels) if levels else 0
-    band, color = next((b, c) for cut, b, c in _SCORE_BANDS if score >= cut)
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:12px;margin:10px 0 6px;">'
-        f'<div style="background:{color};color:#fff;border-radius:999px;'
-        f'padding:8px 16px;font-weight:700;font-size:15px;">{score:g} / 100</div>'
-        f'<div style="color:{color};font-weight:600;">{band}</div>'
-        f'<div class="np-muted">weighted across the rubric'
-        f'{provenance.icon("rubric")}</div></div>',
-        unsafe_allow_html=True)
-    weights = {c["name"]: c["weight"] for c in rubric}
-    for c in fb.get("criteria", []):
-        name, level = c.get("name", ""), int(c.get("level", 1))
-        with st.expander(f"{name}: level {level} of 4  ({weights.get(name, '?')}%)"):
-            st.markdown(f"**Why level {level}**\n\n{c.get('why', '')}")
-            if c.get("why_not_higher"):
-                st.markdown(f"**What level {level + 1} would take**\n\n"
-                            f"{c['why_not_higher']}")
-
-
 def _save_rubric_edits() -> None:
     ss = st.session_state
     new_rubric = []
@@ -736,7 +694,7 @@ def _save_rubric_edits() -> None:
     drift = 100 - sum(c["weight"] for c in new_rubric)
     new_rubric[0]["weight"] += drift
     ss.sb_rubric = new_rubric
-    store.log_event(_rid(), "respond", "rubric_edit", {"rubric": new_rubric})
+    store.log_event(_rid(), "themes", "rubric_edit", {"rubric": new_rubric})
 
 
 def _render_rubric_editor() -> None:
@@ -758,8 +716,6 @@ def _render_rubric_editor() -> None:
             st.form_submit_button("Save rubric", on_click=_save_rubric_edits)
 
 
-
-
 # ---------------------------------------------------------------------------
 # Steps 3 and 4, merged: pick a theme, then write one rule for it
 # ---------------------------------------------------------------------------
@@ -773,10 +729,6 @@ def _render_rubric_editor() -> None:
 # theme; `sb_tphase` moves a theme from writing its rule to the comparisons that
 # test it. People move between menu and workspace three times, which is a loop
 # inside one step rather than forward travel, so it is not two wizard steps.
-
-N_THEME_CMPS = 2      # round-1 comparisons per theme, run inline
-_PANE_H = 430         # px, the fixed height of the conversation pane
-
 
 def _theme_cases(theme: str) -> list[dict]:
     return [s for s in (st.session_state.sb_scenarios or [])
@@ -819,12 +771,11 @@ def _ensure_theme_cases(theme: str) -> list[dict]:
     if want > 0:
         titles = [s["title"] for s in ss.sb_scenarios]
         with st.spinner("Writing cases for this theme..."):
-            data = llm.expand_theme(ss.sb_agent, _does(), ss.sb_desc,
+            data = llm.expand_theme(ss.sb_agent, _does(), "",
                                     ss.sb_audience, theme, titles, want)
         # theme= forces the category, so a near-miss from the model cannot land
         # a case in a bucket no theme card can reach.
         _append_new(_ingest_scenarios(data, theme=theme))
-        ss["_sb_scen_meta"] = {k: data.get(k) for k in ("_mock", "_error")}
         have = _theme_cases(theme)
     return have
 
@@ -899,10 +850,10 @@ def _theme_card(t: dict, is_done: bool) -> None:
         ans = _theme_answer(name)
         with st.expander("Your rule for this theme"):
             st.write((ans or {}).get("ideal_behavior", ""))
-        st.button("Revise this rule", key=f"sb_pick_{name}", type="secondary",
+        st.button("Revise this rule", key=f"sb_open_{name}", type="secondary",
                   use_container_width=True, on_click=_open_theme, args=(name,))
     else:
-        st.button("Write a rule for this", key=f"sb_pick_{name}", type="primary",
+        st.button("Write a rule for this", key=f"sb_open_{name}", type="primary",
                   use_container_width=True, on_click=_open_theme, args=(name,))
 
 
@@ -937,8 +888,6 @@ def _unincorporated(idx: int, draft: str) -> list[dict]:
         if len(ans.split()) >= 4 and words and not (words & have):
             out.append(r)
     return out
-
-
 
 
 def _render_score_bar(name: str, level: int | None, weight: int) -> str:
@@ -1401,9 +1350,11 @@ def _render_theme_workspace() -> None:
 
     _handle_workspace_actions(idx, scenario, cases)
 
-    header(meta["name"],
-           f"Theme {min(n_done + 1, wizard.N_THEMES)} of {wizard.N_THEMES}. "
-           f"{meta['blurb']}")
+    revisiting = theme in (ss.get("sb_themes_done") or [])
+    count = (f"Revising a finished theme" if revisiting and
+             n_done >= wizard.N_THEMES else
+             f"Theme {min(n_done + 1, wizard.N_THEMES)} of {wizard.N_THEMES}")
+    header(meta["name"], f"{count}. {meta['blurb']}")
     st.button("Back to the themes", key="sb_back_themes", type="secondary",
               on_click=_close_theme)
     _workspace(idx, theme, cases, scenario)
@@ -1419,7 +1370,7 @@ def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> No
             ss[f"sb_first_{idx}"] = draft
         with st.spinner("Checking your rule against the rubric..."):
             ss[f"sb_fb_{idx}"] = llm.rubric_feedback(
-                ss.sb_agent, _does(), ss.sb_desc, ss.sb_audience, scenario, draft,
+                ss.sb_agent, _does(), "", ss.sb_audience, scenario, draft,
                 ss.sb_rubric, reflection=_reflection_answers(idx))
         ss[f"sb_lastfb_{idx}"] = ss[f"sb_fb_{idx}"]
         ss[f"sb_nrev_{idx}"] = ss.get(f"sb_nrev_{idx}", 0) + 1
@@ -1505,7 +1456,7 @@ def _theme_cmps(theme: str, rnd: int) -> list[dict]:
     out = []
     with st.spinner("Building a couple of close calls..."):
         for k in range(N_THEME_ROUND):
-            data = llm.confirm_pairwise(ss.sb_agent, _does(), ss.sb_desc,
+            data = llm.confirm_pairwise(ss.sb_agent, _does(), "",
                                         ss.sb_audience, ans, _theme_rule(theme),
                                         avoid=used, edge=(rnd > 1))
             opts = list(data.get("options") or [])
@@ -1575,6 +1526,20 @@ def _theme_after_reveal(cmp: dict, i: int) -> None:
                         {"comparison": cmp["id"], "theme": cmp.get("theme"),
                          "round": cmp["round"], "person": row.get("choice"),
                          "model": model.get("choice"), "agreed": row["agreed"]})
+    # A round-2 edit lives in the rule box; without re-recording it here the
+    # saved answer, the menu, the export and later rounds' generation would all
+    # keep the pre-edit text while the person believes they revised it.
+    theme = cmp.get("theme", "")
+    if theme:
+        idx = _theme_index(theme)
+        live = (ss.get(f"sb_answer_{idx}") or "").strip()
+        stored = (_theme_answer(theme) or {}).get("ideal_behavior", "")
+        if live and live != stored:
+            cases = _theme_cases(theme)
+            _record_answer(cases[0] if cases else {"id": -1, "title": theme,
+                                                   "situation": "",
+                                                   "at_stake": ""},
+                           theme=theme, case_ids=[c["id"] for c in cases])
     ss.sb_tcidx = ss.get("sb_tcidx", 0) + 1
 
 
@@ -1707,11 +1672,6 @@ def _render_rule_reminder(idx: int) -> None:
 _LAST_ROUND = 3
 
 
-
-
-
-
-
 def _record_pick(cmp: dict, choice: str, i: int) -> None:
     """Commit a pick and the reason for it.
 
@@ -1744,16 +1704,9 @@ def _record_pick(cmp: dict, choice: str, i: int) -> None:
     store.log_event(_rid(), "confirm", "confirm_pick", row)
 
 
-
 def _row_for(cmp_id: str) -> dict | None:
     return next((r for r in st.session_state.sb_confirm
                  if r.get("id") == cmp_id), None)
-
-
-
-
-
-
 
 
 def _render_options(cmp: dict, highlight: str = "", mine: str = "") -> None:
@@ -1805,7 +1758,6 @@ def _set_pick(cmp: dict, choice: str) -> None:
     st.session_state[f"sb_pick_{cmp['id']}"] = choice
 
 
-
 def _render_pick_controls(cmp: dict, rnd: int, i: int) -> str:
     """Which first, then why, then an explicit continue.
 
@@ -1826,7 +1778,6 @@ def _render_pick_controls(cmp: dict, rnd: int, i: int) -> str:
         st.text_input("Why this one?", key=f"sb_cnote_{rnd}_{i}",
                       placeholder="what tipped it")
     return chosen
-
 
 
 # ---------------------------------------------------------------------------
@@ -1869,7 +1820,7 @@ def render_output() -> None:
         st.info("Author some behaviors first (previous step).")
         return
     artifact = export.build_artifact(
-        agent=ss.sb_agent, frame=ss.sb_frame or {}, description=ss.sb_desc,
+        agent=ss.sb_agent, frame=ss.sb_frame or {},
         audience=ss.sb_audience, intake_reflection=_intake_answers(),
         scenarios=ss.sb_scenarios, answers=ss.sb_answers,
         confirm=ss.sb_confirm, rubric=ss.sb_rubric,

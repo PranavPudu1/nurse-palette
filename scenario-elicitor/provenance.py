@@ -151,21 +151,6 @@ INFO: dict[str, dict[str, str]] = {
                   "on. Write two replies that differ only in that, neither "
                   "obviously better.",
     },
-    "policy": {
-        "what": "One set of instructions, written from everything you have said "
-                "so far, then sharpened as you correct it.",
-        "source": "It is built from the rules you wrote for each situation plus "
-                  "the choices you made between replies, and every line should "
-                  "trace back to something you actually wrote or picked. It is "
-                  "never rewritten from scratch; it only gets sharper. The "
-                  "underlying idea is that if a set of written instructions "
-                  "really captures what you want, an AI following only those "
-                  "instructions should make the same choices you did. (Source: "
-                  "Inverse Constitutional AI 2025.)",
-        "prompt": "Write instructions that capture what THIS person wants. Every "
-                  "line must trace to something they wrote or chose. Where their "
-                  "choices and their written rules disagree, follow the choices.",
-    },
     "model_pick": {
         "what": "Which reply your instructions chose, and which line decided it.",
         "source": "The AI reads only your instructions, not your mind, and picks "

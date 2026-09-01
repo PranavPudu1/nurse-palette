@@ -1,4 +1,4 @@
-"""Every layout completes a theme, and produces the same state."""
+"""The staged split workspace completes a theme; the stages gate correctly."""
 import os, sys, pathlib, tempfile, warnings
 warnings.filterwarnings("ignore")
 APP = str(pathlib.Path(__file__).resolve().parent.parent)
@@ -26,103 +26,83 @@ def click(at, label):
     return False
 
 
-SEEN_RUBRIC = {}
+def next_stage(at):
+    for b in at.button:
+        if b.label.startswith("Next:"):
+            if b.disabled:
+                return "blocked"
+            b.click().run(); return "moved"
+    return "none"
 
 
-def _note_rubric(at, layout):
-    labels = [e.label for e in at.get("expander")]
-    if any("rubric" in (l or "").lower() for l in labels):
-        SEEN_RUBRIC[layout] = True
-
-
-def run_theme(layout):
-    at = AppTest.from_file(APP + "/app.py", default_timeout=300)
-    at.run()
-    at.text_input(key="gate_code").set_value("TEST").run(); click(at, "Enter")
-    at.text_input(key="gate_name").set_value("L").run(); click(at, "Begin")
-    click(at, "Continue")
-    at.selectbox(key="sb_age_input").set_value("9-12").run()
-    click(at, "Continue")
-    ss = at.session_state
-    click(at, "Write a rule for this")
-    # the switcher only exists for test sessions, and this is one
-    assert any(r.key == "sb_layout" for r in at.radio), "no layout switcher"
-    at.radio(key="sb_layout").set_value(layout).run()
-    assert not at.exception, f"{layout}: {at.exception}"
-    idx = ss["sb_idx"]
-
-    # walk whatever stages this layout has, answering and writing as they appear
-    for _ in range(6):
-        _note_rubric(at, layout)
-        for w in list(at.text_area):
-            if w.key and w.key.startswith((f"w_sb_rap_{idx}", f"w_sb_rab_{idx}_")):
-                if not (str(w.value or "")).strip():
-                    at.text_area(key=w.key).set_value(ANS).run()
-        if any(w.key == f"w_sb_answer_{idx}" for w in at.text_area):
-            if not (str(at.text_area(key=f"w_sb_answer_{idx}").value or "")).strip():
-                at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
-        if any(b.label == "Save this rule and test it" and not b.disabled
-               for b in at.button):
-            break
-        moved = False
-        for b in at.button:
-            if b.label.startswith("Next:"):
-                if not b.disabled:
-                    b.click().run(); moved = True
-                break
-        if not moved and not any(b.label.startswith("Next:") for b in at.button):
-            break
-    assert not at.exception, f"{layout}: {at.exception}"
-    ok = click(at, "Save this rule and test it")
-    return at, ss, idx, ok
-
-
-print("=== each layout completes a theme ===")
-results = {}
-for layout in ("A", "B", "C", "D", "O"):
-    at, ss, idx, ok = run_theme(layout)
-    check(ok, f"{layout}: saved the rule")
-    check(not at.exception, f"{layout}: no exception ({at.exception})")
-    check(ss["sb_tphase"] == "test", f"{layout}: reached the testing loop")
-    ans = [a for a in ss["sb_answers"]][0]
-    results[layout] = {"rule": ans["ideal_behavior"], "theme": ans["theme"],
-                       "n_reflect": len(ans["reflection"])}
-    check(ans["ideal_behavior"] == DRAFT, f"{layout}: the rule saved verbatim")
-    check(len(ans["reflection"]) >= 1, f"{layout}: reflection captured "
-                                       f"({len(ans['reflection'])})")
-
-print("=== the rubric editor is reachable in every layout ===")
-# It is anchored to the score display. A refactor already orphaned it once,
-# defined but called from nowhere, so this checks it appears somewhere during a
-# normal walk rather than at one fixed moment: layouts that stage the work do
-# not show the score on every stage, and should not.
-for layout in ("A", "B", "C", "D", "O"):
-    check(SEEN_RUBRIC.get(layout), f"{layout}: the rubric editor was on screen")
-
-print("=== all five produce the same state ===")
-base = results["A"]
-for layout in ("B", "C", "D", "O"):
-    check(results[layout] == base,
-          f"{layout} matches A ({results[layout]} vs {base})")
-
-print("=== the switcher is hidden from a real participant ===")
+print("=== the staged workspace completes a theme ===")
 at = AppTest.from_file(APP + "/app.py", default_timeout=300)
 at.run()
-at.text_input(key="gate_code").set_value(os.environ.get("ACCESS_CODE", "HAILAB25")).run()
-click(at, "Enter")
-at.text_input(key="gate_name").set_value("Real").run(); click(at, "Begin")
+at.text_input(key="gate_code").set_value("TEST").run(); click(at, "Enter")
+at.text_input(key="gate_name").set_value("L").run(); click(at, "Begin")
 click(at, "Continue")
 at.selectbox(key="sb_age_input").set_value("9-12").run()
-for _w in [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]:
-    at.text_area(key=_w.key).set_value("I want her told, gently.").run()
+for w in [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]:
+    at.text_area(key=w.key).set_value("Gently.").run()
 click(at, "Continue")
+ss = at.session_state
 click(at, "Write a rule for this")
-check(at.session_state["resp_test"] is False, "this is a non-test session")
 check(not any(r.key == "sb_layout" for r in at.radio),
-      "no layout switcher for a real participant")
+      "no layout switcher anywhere (split is the only layout)")
+idx = ss["sb_idx"]
+
+# Stage 0: Consider + write. Rule box present on the SAME stage as questions.
+check(any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
+      "stage 0 has the rule box below the questions")
+check(next_stage(at) == "blocked", "Next blocked with questions unanswered")
+for w in [w for w in at.text_area
+          if w.key and w.key.startswith((f"w_sb_rap_{idx}", f"w_sb_rab_{idx}_"))]:
+    at.text_area(key=w.key).set_value(ANS).run()
+check(next_stage(at) == "blocked", "Next still blocked with no rule written")
+at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
+check(next_stage(at) == "moved", "Next opens once questions + first draft exist")
+check((ss[f"sb_first_{idx}"] or "").strip() == DRAFT,
+      "leaving Consider captured the first draft")
+
+# Stage 1: Score + revise. Rubric + reflections accordion.
+labels = [e.label for e in at.get("expander")]
+check(any("reflections" in (l or "").lower() for l in labels),
+      "stage 1 shows the reflections accordion")
+check(any("rubric" in (l or "").lower() for l in labels),
+      "the rubric editor is reachable on the score stage")
+click(at, "Check my answer")
+check(not at.exception, f"check ran ({at.exception})")
+check(next_stage(at) == "moved", "onward to Sharpen")
+
+# Stage 2: Sharpen (placeholder, optional).
+check(next_stage(at) == "moved", "Sharpen never blocks")
+
+# Stage 3: Test. Versions rail + mark-final gates Save.
+click(at, "Try it on a case")
+check(not at.exception, f"tried the rule ({at.exception})")
+check(any(r.key == f"sb_final_{idx}" for r in at.radio),
+      "the final-version picker is on the test stage")
+save = [b for b in at.button if b.label == "Save this rule and test it"]
+check(bool(save) and not save[0].disabled,
+      "save enabled once a final version is marked (defaults to newest)")
+click(at, "Save this rule and test it")
+check(ss["sb_tphase"] == "test", "saving leads into the theme rounds")
+ans = ss["sb_answers"][0]
+check(ans["ideal_behavior"] == DRAFT, "the marked version is what saved")
+check(ans.get("final_version", "") != "", "the final version label was recorded")
+check(len(ans["reflection"]) >= 1, "reflections captured")
+
+print("=== resume returns to the same stage ===")
+code = ss["resp_code"]
+at2 = AppTest.from_file(APP + "/app.py", default_timeout=300)
+at2.run()
+at2.text_input(key="gate_code").set_value("TEST").run(); click(at2, "Enter")
+at2.text_input(key="gate_resume").set_value(code).run(); click(at2, "Resume")
+check(not at2.exception, f"resume raised nothing ({at2.exception})")
+check(at2.session_state[f"sb_stage_{idx}"] == 3, "stage survived the resume")
 
 print()
 if FAILS:
     print(f"!!! {len(FAILS)} FAILURES"); [print("   -", f) for f in FAILS]
     sys.exit(1)
-print("LAYOUT TESTS PASSED")
+print("WORKSPACE TESTS PASSED")

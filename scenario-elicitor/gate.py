@@ -225,6 +225,9 @@ def ready() -> bool:
         header("Welcome",
                "This is a research study session. Enter the access code you were "
                "given to begin.")
+        st.markdown('<div class="np-mobile-note">This study works best on a '
+                    'laptop. It will run on a phone, but the writing space is '
+                    'small.</div>', unsafe_allow_html=True)
         st.text_input("Access code", key="gate_code", max_chars=20,
                       help="The code from your invitation. Enter TEST to try the "
                            "tool without contributing data.")

@@ -174,8 +174,8 @@ _SNAPSHOT_KEYS = {
     "sb_theme", "sb_tphase", "sb_themes_done", "sb_tcidx", "sb_tround",
     "resp_child_age", "sb_age_input", "sb_name_input",
     "sb_rqi",
-    "sb_agent", "sb_frame", "sb_desc", "sb_audience", "sb_scenarios",
-    "sb_next_id", "sb_idx", "sb_answers", "sb_examples", "sb_confirm",
+    "sb_agent", "sb_frame", "sb_audience", "sb_scenarios",
+    "sb_next_id", "sb_idx", "sb_answers", "sb_confirm",
     "sb_confirm_cache", "sb_rubric", "sb_submitted",
     "sb_cmp", "sb_revealed",
 }

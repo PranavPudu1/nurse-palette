@@ -77,7 +77,6 @@ def init() -> None:
     # The study's fixed domain is preselected; free text and chips still work.
     ss.setdefault("sb_agent", prompts.KIDS_AGENT)
     ss.setdefault("sb_frame", None)
-    ss.setdefault("sb_desc", "")
     ss.setdefault("sb_audience", "")        # who the agent is for (concreteness)
     ss.setdefault("sb_scenarios", None)     # list of concrete case dicts once generated
     ss.setdefault("sb_next_id", 0)
@@ -90,7 +89,6 @@ def init() -> None:
     ss.setdefault("sb_tphase", "write")      # "write" | "test"
     ss.setdefault("sb_tround", 1)            # round within a theme's testing loop
     ss.setdefault("sb_themes_done", [])      # theme names with a saved rule
-    ss.setdefault("sb_examples", {})        # case_id -> {"text": ...} example cache
     ss.setdefault("sb_confirm", [])         # every pick, across all rounds
     ss.setdefault("sb_confirm_cache", {})   # legacy, kept so old snapshots load
     ss.setdefault("sb_cmp", {})             # "theme:round" -> [comparison, ...]

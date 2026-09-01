@@ -137,7 +137,6 @@ stamps = {}
 for n in range(wizard.N_THEMES):
     t_theme = time.time()
     check(click(at, "Write a rule for this"), f"opened theme {n + 1}")
-    at.radio(key="sb_layout").set_value("B").run()
     theme, idx = ss["sb_theme"], ss["sb_idx"]
     cases = [s for s in ss["sb_scenarios"] if s["category"] == theme]
     check(len(cases) == wizard.N_CASES_PER_THEME,
@@ -153,8 +152,25 @@ for n in range(wizard.N_THEMES):
               if w.key and w.key.startswith((f"w_sb_rap_{idx}", f"w_sb_rab_{idx}_"))]:
         at.text_area(key=w.key).set_value(ANS).run()
     at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
+    # walk the stages: consider+write -> score+revise -> sharpen -> test
+    for _ in range(3):
+        for b in at.button:
+            if b.label.startswith("Next:") and not b.disabled:
+                b.click().run(); break
+    check(ss[f"sb_stage_{idx}"] == 3, "reached the Test stage")
+    # Check lives on the score stage; go back to it, check, return to test
+    for b in at.button:
+        if b.label == "Back":
+            b.click().run(); break
+    for b in at.button:
+        if b.label == "Back":
+            b.click().run(); break
     check(click(at, "Check my answer"), f"checked theme {n + 1}")
     check(bool(ss[f"sb_fb_{idx}"].get("criteria")), "rubric returned criteria")
+    for _ in range(2):
+        for b in at.button:
+            if b.label.startswith("Next:") and not b.disabled:
+                b.click().run(); break
     check(click(at, "Save this rule and test it"), f"saved theme {n + 1}")
     for rnd in (1, 2, 3):
         if ss["sb_tround"] != rnd:
@@ -175,28 +191,7 @@ for n in range(wizard.N_THEMES):
     print(f"      theme {n + 1} ({theme}): {stamps[theme]:.0f}s")
 
 click(at, "Continue")
-t_final = time.time()
-for rnd in (1, 2, 3):
-    if ss["sb_round"] != rnd:
-        check(click(at, f"Start round {rnd}"), f"final round {rnd}")
-    for _ in range(len(ss["sb_cmp"][str(rnd)])):
-        j = ss["sb_cidx"]
-        check("the agent chose this" not in md(at), f"no leak, final r{rnd}")
-        click(at, "Prefer left")
-        at.text_input(key=f"sb_cnote_{rnd}_{j}").set_value("instinct").run()
-        click(at, "Continue")
-        if rnd == 2:
-            at.text_area(key=f"sb_crit_{rnd}_{j}").set_value("").run()
-            click(at, "Apply and continue")
-        elif rnd == 3:
-            click(at, "Next")
-pol = ss["sb_policy"]
-check(bool(pol and pol["principles"]), "policy written")
-check(not any(p.lstrip()[:3].rstrip('.').rstrip(')').isdigit()
-              for p in pol["principles"]), "no leading numbering on principles")
-print("      policy:")
-for p in pol["principles"]:
-    print("       -", p)
+check(ss["sb_step_key"] == "output", "themes lead straight to export")
 
 while ss["sb_step_key"] != "output":
     if not click(at, "Continue"):
@@ -216,11 +211,10 @@ intake = [{"placement": "intake", "type": q.get("type", ""),
 check(len(intake) == len(ss["sb_rqi"]),
       f"every intake question was answered and stored ({len(intake)})")
 art = export.build_artifact(
-    agent=ss["sb_agent"], frame=ss["sb_frame"] or {}, description=ss["sb_desc"],
+    agent=ss["sb_agent"], frame=ss["sb_frame"] or {},
     audience=ss["sb_audience"], intake_reflection=intake,
     scenarios=ss["sb_scenarios"], answers=ss["sb_answers"],
-    confirm=ss["sb_confirm"], rubric=ss["sb_rubric"], policy=ss["sb_policy"],
-    policy_log=ss["sb_policy_log"])
+    confirm=ss["sb_confirm"], rubric=ss["sb_rubric"])
 json.loads(export.to_json(art))
 check(bool(art["intake_reflection"]), "intake answers are in the artifact")
 check(all(c.get("theme") for c in art["confirmations"] if c.get("level") == "theme"),
@@ -231,7 +225,6 @@ check(all(r["theme"] and r["at_stake"] for r in rows), "benchmark rows complete"
 secs = time.time() - t_start
 print(f"\n      SESSION: {secs/60:.1f} min of machine time, "
       f"{len(ss['sb_confirm'])} comparisons, {len(ss['sb_answers'])} rules")
-print(f"      final rounds alone: {(time.time() - t_final)/60:.1f} min")
 print(f"      total incl. component checks: {(time.time() - T0)/60:.1f} min")
 
 print()

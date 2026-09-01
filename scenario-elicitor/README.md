@@ -8,66 +8,59 @@ concrete situations, and produces a personalized benchmark of AI behaviors.
 This is the second product the advisor (Min) asked for: more directly useful for
 testing an AI, seeding a benchmark across domains, or personalizing an agent.
 
-## The pipeline (6 screens)
+## The pipeline (4 steps)
 
-1. **Agent** - what AI or agent you are setting preferences for. Domain-general,
-   with AI-behavior example chips (scheduling assistant, kids' content filter,
-   writing assistant, email assistant).
-2. **Behavior** - how you want it to behave (optional) and, importantly, **who it
-   is for**. Naming the audience keeps the cases concrete.
-3. **Cases** - a Farsight-style fan-out: the LLM generates a set of **concrete
-   cases** the agent would face, grouped into a few themes, to surface ones you
-   had not considered. Each case follows the paper's structure (the case, what is
-   at stake, things to weigh, how it plays out, who it affects). Drill into a
-   theme; three cases are written for it when you open it.
-4. **Respond** - for each case you **author the ideal behavior**, in your own
-   words, as a short co-writing loop: you draft, hit **Check** to get per-
-   criterion rubric feedback (a level 1-4 per criterion with Why and
-   What-the-next-level-takes, plus a weighted 0-100 score and one probing
-   question), and can ask for a **minimal revision of your own draft** targeted
-   at your weakest criterion, to apply or ignore. The rubric itself is
-   viewable and editable. The box starts empty (a model's take is opt-in
-   reference only) so you are not just accepting a pre-filled answer. Rubric
-   design follows iRULER (Bai et al., CHI '26) and Driscoll et al. (CHI '26);
-   see docs/design-rationale.md.
-   Each case also opens as a **real exchange** (what the child asks, and how the
-   agent replies today), and under your answer there is a **scenario chat**: hit
-   **Test my rule** to see the agent answer that same moment while following what
-   you wrote, revise and test again to compare v1 against v2, or keep chatting to
-   stress-test it. Structure and the two testing paths follow PolicyPad (Feng et
-   al., CHI '26, §5.2.2 and §5.2.5); see docs/provenance.md.
-5. **Confirm** - for each case you answered, a **concrete comparison**: the LLM
-   turns the case into a specific, near yes-or-no instance and offers two
-   contrasting behaviors, and you pick the one you prefer. This confirms what was
-   learned and probes the boundary (what the agent should not do).
-6. **Output** - review and download the benchmark.
+1. **Agent** - locked to the study domain by default (an AI that curates news
+   and content for your child); `DOMAIN_LOCK=off` restores the domain-general
+   chips.
+2. **About your child** - who the agent acts for (age band, optional name) and
+   two required intake reflection questions.
+3. **Themes** - eight worry themes from Driscoll et al.'s parent interviews.
+   You write one rule per theme, three themes total, in a split workspace: the
+   theme's three concrete cases stay pinned on the left while the work steps
+   down the right through four stages.
+   - **Consider + write**: required reflection questions with the rule box
+     directly below them, so your answers stay visible while you write.
+   - **Score + revise**: the same rule, scored against the rubric (level 1-4
+     per criterion with Why and What-the-next-level-takes), your reflections
+     one click away in an accordion. Rubric design follows iRULER (Bai et al.,
+     CHI '26) and Driscoll et al. (CHI '26); see docs/design-rationale.md.
+   - **Sharpen**: optional after-questions (a placeholder that may be cut).
+   - **Test**: chat against the rule (the two testing paths follow PolicyPad,
+     Feng et al., CHI '26), browse every version your testing produced, reload
+     any of them, and **mark one as final** - the marked version is what saves.
+   Saving leads into **three comparison rounds for that theme**: round 1 you
+   pick between two close-call behaviors and say why; round 2 reveals what
+   your rule chose and hands the rule box back so you can close the gap; round
+   3 reveals and scores, changing nothing. Then back to the theme menu. After
+   the third theme, the session goes **straight to export** - there is no
+   end-of-session comparison round.
+4. **Output** - review each theme's final rule, revise before submitting,
+   download or email the exports, submit to lock the session (Prolific
+   completion code shown).
 
 ## Output
 
-- `agent_preferences.json`: the full profile (agent, audience, cases, the ideal
-  behavior you authored for each, and the confirm-step comparisons).
-- `agent_benchmark.jsonl`: one `{agent, audience, situation, at_stake,
-  ideal_behavior}` row per authored case. A personalized benchmark: run each
-  situation through a model and compare its response to your ideal behavior.
-- `agent_comparisons.jsonl`: one `{situation, instance, chosen, rejected}` row per
-  decisive confirm-step pick, a second benchmark over boundary behaviors.
+- `agent_preferences.json`: the full profile (agent, audience, cases, one rule
+  per theme with its version trajectory and reflections, every comparison
+  pick with what the rule chose and whether you agreed).
+- `agent_benchmark.jsonl`: one `{agent, audience, theme, situation, at_stake,
+  ideal_behavior}` row per theme.
+- `agent_comparisons.jsonl`: one `{situation, instance, dimension, chosen,
+  rejected}` row per decisive pick.
 
 ## Design notes
 
-- **Author the behavior, not a pairwise pick.** The datapoint is (situation ->
-  the ideal behavior the agent should take), authored by the person in a co-writing
-  loop with rubric feedback (the iRuler draft-feedback-revise idea) rather than
-  pre-filled, so they do not just agree with the model. This is the meeting
-  direction: a set of (case, ideal behavior) pairs you can test any model against.
-- **Pairwise returns as confirmation.** After authoring, the Confirm step uses
-  concrete pairwise instances to validate the learned preference and elicit the
-  boundary, rather than as the core mechanic.
-- **Concrete cases.** Cases are generated at the level of a real reported case,
-  following the IRAC framing (case, issue, rule, analysis, conclusion) from the
-  legal-opinion elicitation paper Min shared; the person authors the conclusion.
-- **Farsight reference.** The cases step emulates Farsight's fan-out (Wang et al.,
-  CHI 2024): a diverse, themed set that surfaces non-obvious cases, with per-theme
-  an adaptive round that probes where authored rules are ambiguous.
+- **Author the rule, then test it against your own picks.** The datapoint is
+  (theme -> the rule the person authored), written from an empty box with
+  rubric feedback rather than pre-filled, so people do not just accept the
+  model's words. The per-theme rounds then measure whether the rule actually
+  chooses like its author.
+- **Commit-then-reveal.** In every round the person picks and gives a reason
+  before anything the model did is shown.
+- **Concrete cases.** Cases are generated at the level of a real reported
+  case (the IRAC framing from the legal-opinion elicitation paper); themes and
+  their parent counts come from Driscoll et al.'s Table 3.
 - **Runs with no key.** Every model call degrades to a deterministic offline
   mock, so the whole flow is clickable without an API key.
 
@@ -93,8 +86,8 @@ The app runs as a hosted study instrument (Railway; see `Dockerfile`):
   get a 6-character **resume code**; entering it later restores the session.
 - **Persistence**: SQLite at `$DATA_DIR/elicitor.db` (a mounted volume in
   production). `respondents` holds identity + demographics, `events` is an
-  append-only log of every draft, check, suggestion, save, edit, and confirm
-  pick (all iterations are kept), `snapshots` holds the latest state for
+  append-only log of every draft, check, save, edit, version load, and
+  comparison pick (all iterations are kept), `snapshots` holds the latest state for
   resume.
 - **Revise and submit**: answers can be revised from the review page until
   **Submit my responses** freezes the session.

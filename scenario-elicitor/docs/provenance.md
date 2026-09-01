@@ -60,14 +60,17 @@ with no source is worth knowing about too.
 
 | Decision | Where you see it | Why | Source |
 |---|---|---|---|
-| Three rounds run per theme, then three more at the end | After saving a rule, then after all themes | Two different claims. The theme rounds test whether that rule predicts the person's choices; the final rounds test whether one policy built from everything still does | ours, from Min's review |
+| Three rounds run per theme, and none at the end | After saving a rule | The theme rounds test whether that rule predicts the person's choices. Min cut the all-themes round: after the last theme the session goes straight to export | Min's review (Sep 1) |
 | Each comparison changes exactly one thing between the two replies | The "varies" tag on each moment | If two things change, a choice says nothing specific. The four dimensions are the child's age, severity, clarity of intent, and where the risk comes from | Driscoll §7 and Table 14 |
 | A pick is committed with a reason before anything is revealed | Round 2 and 3 | Seeing the model's answer first would contaminate the reason, and the agreement score would stop measuring anything | ours |
 | The buttons come before the reason box, and nothing auto-advances | All rounds | The reason box used to sit above the buttons, asking people to justify a choice they had not made, and one click skipped past it entirely | Min's review |
 | In the theme rounds the model follows only that theme's rule | Round 2's reveal | A disagreement then points at a gap in that rule, rather than at an aggregate the person never wrote | ours |
 | Round 2 hands the rule box back rather than offering a rewrite | Under the reveal | Same reason the AI revision was removed. Round 3 then scores the edited rule, so the loop measures whether their own revision closed the gap | ours |
-| A policy is synthesized from every rule and every pick | After the final round 1 | If a written policy really captures what someone wants, a model following only that policy should make the same choices they did. That is what round 3 measures | ICAI |
 | Round 3 is frozen and scored | The last round | Agreement means nothing if the thing being measured changes while measuring it | ours |
+| The workspace is the split layout, staged | Every theme | Min picked it from five prototypes: the case stays pinned left while the work steps down the right | Min's review (Sep 1) |
+| The rule box sits directly below the questions | Consider + write | Min's fix for "they cannot see their answer": the reflections stay on screen while the first draft is written | Min's review (Sep 1) |
+| Testing is the last stage, with versions and a final pick | The Test stage | People iterate by chatting against the rule; the final version is chosen explicitly because it is not always the last one | Min's review (Sep 1) |
+| A round-2 edit is re-recorded immediately | The theme rounds | Otherwise the export and later rounds keep the pre-edit rule while the person believes they revised it | ours |
 
 ## Study mechanics
 

@@ -1,4 +1,4 @@
-"""The two-level testing loop: three rounds per theme, then three at the end."""
+"""The theme testing loop: three rounds per theme, then straight to export."""
 import os, sys, pathlib, tempfile, warnings
 warnings.filterwarnings("ignore")
 APP = str(pathlib.Path(__file__).resolve().parent.parent)
@@ -52,24 +52,28 @@ def answer_all(idx, slot):
         at.text_area(key=k).set_value(ANS).run()
     return keys
 
+def to_stage(at, n_next):
+    """Walk forward through the staged workspace."""
+    for _ in range(n_next):
+        moved = False
+        for b in at.button:
+            if b.label.startswith("Next:") and not b.disabled:
+                b.click().run(); moved = True; break
+        assert moved, "stage navigation blocked unexpectedly"
+
 for n in range(wizard.N_THEMES):
     assert click(at, "Write a rule for this"), f"open theme {n+1}"
-    # Layout B keeps every control on screen at once, so this test can be about
-    # the testing loop rather than about stage navigation. test_layouts.py is
-    # where the four layouts are compared.
-    at.radio(key="sb_layout").set_value("B").run()
     theme, idx = ss["sb_theme"], ss["sb_idx"]
-    # the save button must be blocked until every question is answered
-    save = [b for b in at.button if b.label == "Save this rule and test it"][0]
-    assert save.disabled, "save was enabled with questions unanswered"
-    at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
-    save = [b for b in at.button if b.label == "Save this rule and test it"][0]
-    assert save.disabled, "save enabled with a rule but no answers"
+    # stage 0 gates on questions AND a first draft
+    nxt = [b for b in at.button if b.label.startswith("Next:")][0]
+    assert nxt.disabled, "Next was open with questions unanswered"
     filled = answer_all(idx, "b")
     assert filled, "no question boxes on screen"
+    at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
+    to_stage(at, 3)   # -> score, -> sharpen, -> test
     save = [b for b in at.button if b.label == "Save this rule and test it"][0]
-    assert not save.disabled, "save still blocked after answering everything"
-    assert click(at, "Save this rule and test it"), "save blocked after answering"
+    assert not save.disabled, "save blocked despite a marked final version"
+    assert click(at, "Save this rule and test it"), "save blocked"
     assert not at.exception, at.exception
     assert ss["sb_tphase"] == "test" and ss["sb_tround"] == 1
 
@@ -114,32 +118,7 @@ assert all(r["theme"] for r in theme_picks), "picks lost their theme"
 print(f"theme loops: {len(theme_picks)} picks, all carrying a theme")
 
 assert click(at, "Continue"), "leave the themes step"
-assert ss["sb_step_key"] == "confirm", ss["sb_step_key"]
-for rnd in (1, 2, 3):
-    if ss["sb_round"] != rnd:
-        assert click(at, f"Start round {rnd}"), f"start final round {rnd}"
-    assert not at.exception, at.exception
-    n = len(ss["sb_cmp"][str(rnd)])
-    for _ in range(n):
-        j = ss["sb_cidx"]
-        assert "the agent chose this" not in md(at), f"leak final r{rnd}"
-        click(at, "Prefer left")
-        at.text_input(key=f"sb_cnote_{rnd}_{j}").set_value("instinct").run()
-        click(at, "Continue")
-        if rnd == 1:
-            continue
-        assert "the agent chose this" in md(at), f"no reveal final r{rnd}"
-        if rnd == 2:
-            at.text_area(key=f"sb_crit_{rnd}_{j}").set_value("").run()
-            click(at, "Apply and continue")
-        else:
-            click(at, "Next")
-    print(f"  final round {rnd}: {n} comparisons")
-
-assert ss["sb_policy"], "no policy was written"
-final = [r for r in ss["sb_confirm"] if r.get("level") == "final" and r["round"] == 3]
-assert len(final) == S.N_ROUND3, len(final)
-print(f"policy v{ss['sb_policy']['version']}, "
-      f"final agreement {sum(1 for r in final if r['agreed'])}/{len(final)}")
-print(f"TOTAL comparisons: {len(ss['sb_confirm'])}")
-print("\nTWO-LEVEL PASSED")
+assert ss["sb_step_key"] == "output", ss["sb_step_key"]
+assert "sb_policy" not in ss or not ss.get("sb_policy"), "no policy is written"
+print(f"TOTAL comparisons: {len(ss['sb_confirm'])} (theme rounds only)")
+print("\nTHEME-LOOP PASSED")

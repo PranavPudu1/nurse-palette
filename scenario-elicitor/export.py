@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 
 
-def build_artifact(*, agent: str, frame: dict, description: str, audience: str,
+def build_artifact(*, agent: str, frame: dict, audience: str,
                    intake_reflection: list[dict] | None = None,
                    scenarios: list[dict], answers: list[dict],
                    confirm: list[dict] | None = None,
@@ -22,7 +22,6 @@ def build_artifact(*, agent: str, frame: dict, description: str, audience: str,
         "restated_agent": (frame or {}).get("restated_agent", agent),
         "does": (frame or {}).get("does", ""),
         "audience": audience,
-        "description": description,
         "intake_reflection": intake_reflection or [],
         "submitted": submitted,
         "rubric": rubric or [],
