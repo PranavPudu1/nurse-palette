@@ -339,134 +339,173 @@ def _render_example_chat(scenario: dict, key: str = "") -> None:
                         f"{ex['ai_response']}", unsafe_allow_html=True)
 
 
-# --- the scenario chat: one linear transcript ---------------------------------
-# Two testing paths (re-answer under the current rule, and continue the
-# conversation to stress-test) plus version-stamped replies follow PolicyPad,
-# Feng et al. CHI '26, §5.2.5 and Fig. 8. See docs/provenance.md.
-#
-# The transcript is a SINGLE ordered list. Render order is list order, so a reply
-# can never appear above the message it answers.
+# --- versions and their chats -------------------------------------------------
+# Versions are first-class. v1 is the first draft, saved automatically on
+# leaving Consider + write ("1 is the first rule"); later versions are created
+# with "Save as new version"; a round-2 edit appends one automatically, so
+# nothing untitled ever speaks. "Original" is the baseline: no rule at all.
+# Every version keeps its own persistent chat thread, so a reply can always be
+# traced to the version that produced it. The testing paths follow PolicyPad,
+# Feng et al. CHI '26, §5.2.5. See docs/provenance.md.
 
-def _chat_state(idx: int, scenario: dict) -> dict:
-    """{"turns": [{role, content, version?, rule?, what_changed?}, ...]}"""
+ORIGINAL = "Original"
+
+
+def _vers(idx: int) -> list[str]:
+    """The saved rule texts for this theme; entry n-1 is version v{n}."""
+    return st.session_state.setdefault(f"sb_vers_{idx}", [])
+
+
+def _vlabels(idx: int, include_original: bool = True) -> list[str]:
+    labels = [f"v{n + 1}" for n in range(len(_vers(idx)))]
+    return ([ORIGINAL] + labels) if include_original else labels
+
+
+def _vrule(idx: int, label: str) -> str:
+    """Rule text for a version label; Original (and anything unknown) is empty."""
+    if label and label.startswith("v"):
+        try:
+            return _vers(idx)[int(label[1:]) - 1]
+        except (ValueError, IndexError):
+            return ""
+    return ""
+
+
+def _save_version(idx: int, text: str | None = None) -> str:
+    """Append text (default: the box) as the next version and select it."""
     ss = st.session_state
-    key = f"sb_chat_{idx}"
-    if key not in ss:
-        ex = scenario.get("example_exchange") or {}
+    text = (ss.get(f"sb_answer_{idx}") or "" if text is None else text).strip()
+    if not text:
+        return ""
+    vers = _vers(idx)
+    if not (vers and vers[-1].strip() == text):
+        vers.append(text)
+        store.log_event(_rid(), "themes", "save_version",
+                        {"theme": ss.get("sb_theme"), "label": f"v{len(vers)}",
+                         "rule": text})
+    label = f"v{len(vers)}"
+    ss[f"sb_vsel_{idx}"] = label
+    ss[f"w_sb_vsel_{idx}"] = label
+    return label
+
+
+def _select_version(idx: int) -> None:
+    """Dropdown change: load that version's text into the box (Original: empty)."""
+    ss = st.session_state
+    label = ss.get(f"w_sb_vsel_{idx}", ORIGINAL)
+    ss[f"sb_vsel_{idx}"] = label
+    text = _vrule(idx, label)
+    ss[f"sb_answer_{idx}"] = text
+    ss[f"w_sb_answer_{idx}"] = text
+
+
+def _chats(idx: int) -> dict:
+    return st.session_state.setdefault(f"sb_chats_{idx}", {})
+
+
+def _thread(idx: int, label: str, scenario: dict) -> dict:
+    """One persistent chat thread per version.
+
+    Original seeds from the case's example exchange (the baseline reply already
+    exists, no API call). A rule version starts empty; its first reply is
+    generated under that rule when the person asks.
+    """
+    chats = _chats(idx)
+    if label not in chats:
         turns = []
-        if ex.get("user_message"):
-            turns.append({"role": "user", "content": ex["user_message"]})
-        if ex.get("ai_response"):
-            turns.append({"role": "assistant", "content": ex["ai_response"],
-                          "version": "No rule yet", "rule": "", "what_changed": ""})
-        ss[key] = {"turns": turns}
-    return ss[key]
+        if label == ORIGINAL:
+            ex = scenario.get("example_exchange") or {}
+            if ex.get("user_message"):
+                turns.append({"role": "user", "content": ex["user_message"]})
+            if ex.get("ai_response"):
+                turns.append({"role": "assistant", "content": ex["ai_response"],
+                              "version": ORIGINAL, "rule": "", "what_changed": ""})
+        chats[label] = {"turns": turns}
+    return chats[label]
 
 
-def _history_for_model(turns: list[dict]) -> list[dict]:
-    """History up to and including the last user message.
-
-    Trailing assistant turns are dropped so a re-test answers the child's last
-    question again instead of replying to the agent's own previous answer.
-    """
-    out = list(turns)
-    while out and out[-1]["role"] == "assistant":
-        out.pop()
-    return out
+def _default_question(scenario: dict) -> str:
+    return ((scenario.get("example_exchange") or {}).get("user_message") or "").strip()
 
 
-def _n_tests(turns: list[dict]) -> int:
-    """Only explicit "Test my rule" presses are versions.
-
-    Follow-up replies also run under the current rule, but they answer a new
-    question rather than re-answering the same one, so they do not bump v-number.
-    """
-    return sum(1 for t in turns if t.get("tested"))
-
-
-def _request_test(idx: int) -> None:
-    st.session_state["_sb_test"] = idx
-
-
-def _request_followup(idx: int) -> None:
-    msg = (st.session_state.get(f"sb_followup_{idx}") or "").strip()
+def _request_ask(idx: int, k: int) -> None:
+    msg = (st.session_state.get(f"sb_cq_{idx}_{k}") or "").strip()
     if msg:
-        st.session_state["_sb_followup"] = (idx, msg)
+        st.session_state["_sb_ask"] = (idx, k, msg)
+        st.session_state[f"sb_cq_{idx}_{k}"] = ""
 
 
-def _run_test(idx: int, scenario: dict, rule: str) -> None:
-    """Answer the child's latest message again under the current rule."""
+def _request_ask_default(idx: int, k: int, msg: str) -> None:
+    st.session_state["_sb_ask"] = (idx, k, msg)
+
+
+def _ask_version(idx: int, k: int, scenario: dict, msg: str) -> None:
+    """Ask one version a question, inside its own thread."""
     ss = st.session_state
-    state = _chat_state(idx, scenario)
-    turns = state["turns"]
-    rule = (rule or "").strip()
-    # Nothing to learn from re-running the identical rule on the same question.
-    # A follow-up since the last test means there is a new question to answer, so
-    # only block when the very last turn is a test with this same rule.
-    last = turns[-1] if turns else None
-    if (last and last["role"] == "assistant" and last.get("tested")
-            and (last.get("rule") or "").strip() == rule):
-        st.toast("That is the same rule you just tested. Edit it, then test again.")
-        return
-    history = _history_for_model(turns)
-    with st.spinner("Asking the agent again, following your rule..."):
+    label = ss.get(f"sb_cmpv_{idx}_{k}") or ORIGINAL
+    rule = _vrule(idx, label)
+    turns = _thread(idx, label, scenario)["turns"]
+    turns.append({"role": "user", "content": msg})
+    with st.spinner(f"Asking {label}..."):
         data = llm.agent_reply(ss.sb_agent, _does(), ss.sb_audience, scenario,
-                               rule, history)
-    n = _n_tests(turns) + 1
-    turns.append({"role": "assistant", "content": (data.get("response") or "").strip(),
-                  "version": f"Your rule v{n}", "rule": rule, "tested": True,
+                               rule or None, turns)
+    turns.append({"role": "assistant",
+                  "content": (data.get("response") or "").strip(),
+                  "version": label, "rule": rule,
                   "what_changed": (data.get("what_changed") or "").strip(),
                   "_mock": data.get("_mock"), "_error": data.get("_error")})
-    store.log_event(_rid(), "themes", "test_rule",
-                    {"case_idx": idx, "version": n, "rule": rule,
+    store.log_event(_rid(), "themes", "chat",
+                    {"case_idx": idx, "version": label, "message": msg,
                      "reply": turns[-1]["content"]})
 
 
-def _run_followup(idx: int, scenario: dict, rule: str, msg: str) -> None:
-    """Continue the conversation to stress-test the current rule."""
+def _render_thread(idx: int, label: str, scenario: dict, height: int = 240) -> None:
+    turns = _thread(idx, label, scenario)["turns"]
+    with st.container(height=height, border=False):
+        if not turns:
+            st.caption("No conversation yet. Ask the question below.")
+        for t in turns:
+            if t["role"] == "user":
+                with st.chat_message("user"):
+                    st.markdown(f"**{_who()}**  \n{t['content']}")
+            else:
+                _mock_note(t)
+                with st.chat_message("assistant"):
+                    ikey = ("rule_reply" if (t.get("rule") or "").strip()
+                            else "baseline_reply")
+                    st.markdown(f"**{t.get('version', label)}** "
+                                f"{provenance.icon(ikey)}  \n{t['content']}",
+                                unsafe_allow_html=True)
+                    if t.get("what_changed"):
+                        st.caption(f"What this version changed: {t['what_changed']}")
+
+
+def _ui_compare_column(idx: int, k: int, scenario: dict) -> None:
+    """One compare column: pick a version, see its thread, ask it things."""
     ss = st.session_state
-    state = _chat_state(idx, scenario)
-    turns = state["turns"]
-    rule = (rule or "").strip()
-    turns.append({"role": "user", "content": msg})
-    with st.spinner("Sending it to the agent..."):
-        data = llm.agent_reply(ss.sb_agent, _does(), ss.sb_audience, scenario,
-                               rule or None, turns)
-    n = _n_tests(turns)
-    turns.append({"role": "assistant", "content": (data.get("response") or "").strip(),
-                  "version": (f"Following your rule v{n}" if rule and n
-                              else ("Following your rule" if rule else "No rule yet")),
-                  "rule": rule, "tested": False, "what_changed": "",
-                  "_mock": data.get("_mock"), "_error": data.get("_error")})
-    store.log_event(_rid(), "themes", "continue_chat",
-                    {"case_idx": idx, "message": msg, "reply": turns[-1]["content"]})
-
-
-def _render_scenario_chat(idx: int, scenario: dict) -> None:
-    state = _chat_state(idx, scenario)
-    turns = state["turns"]
-
-    section("The conversation")
-    st.caption("How this plays out. Write your rule below, then test it and watch "
-               "the agent answer again.")
-    for t in turns:
-        if t["role"] == "user":
-            with st.chat_message("user"):
-                st.markdown(f"**{_who()}**  \n{t['content']}")
-        else:
-            _mock_note(t)
-            with st.chat_message("assistant"):
-                ikey = "rule_reply" if (t.get("rule") or "").strip() else "baseline_reply"
-                st.markdown(f"**{t.get('version', 'The agent')}** "
-                            f"{provenance.icon(ikey)}  \n{t['content']}",
-                            unsafe_allow_html=True)
-                if t.get("what_changed"):
-                    st.caption(f"What your rule changed: {t['what_changed']}")
-    st.text_input("Keep chatting", key=f"sb_followup_{idx}",
-                  placeholder=f"Type what {_who()} says next, to test your rule "
-                              f"further...",
+    options = ["Pick a version..."] + _vlabels(idx)
+    cur = ss.get(f"sb_cmpv_{idx}_{k}") or options[0]
+    if cur not in options:
+        cur = options[0]
+    pick = st.selectbox(f"Column {k + 1} version", options,
+                        index=options.index(cur), key=f"w_sb_cmpv_{idx}_{k}",
+                        label_visibility="collapsed")
+    if pick == options[0]:
+        ss[f"sb_cmpv_{idx}_{k}"] = ""
+        st.caption("Each column chats with one version, so you can compare "
+                   "them side by side.")
+        return
+    ss[f"sb_cmpv_{idx}_{k}"] = pick
+    _render_thread(idx, pick, scenario)
+    dq = _default_question(scenario)
+    if dq and not _thread(idx, pick, scenario)["turns"]:
+        st.button(f"Ask the case's question", key=f"sb_dq_{idx}_{k}",
+                  type="secondary", use_container_width=True,
+                  on_click=_request_ask_default, args=(idx, k, dq))
+    st.text_input("Ask this version", key=f"sb_cq_{idx}_{k}",
+                  placeholder=f"Ask {pick} something...",
                   label_visibility="collapsed",
-                  on_change=_request_followup, args=(idx,))
+                  on_change=_request_ask, args=(idx, k))
 
 
 # ---------------------------------------------------------------------------
@@ -510,15 +549,16 @@ def _record_answer(scenario: dict, theme: str = "",
         # levels describe an earlier draft than the one being saved.
         "levels_current": bool(live_fb),
         "n_revisions": ss.get(f"sb_nrev_{idx}", 0),
-        # The test-revise trajectory, read off the transcript: every agent turn
-        # with the rule that produced it.
-        "rule_versions": [{"label": t.get("version", ""), "rule": t.get("rule", ""),
-                           "reply": t.get("content", "")}
-                          for t in (ss.get(f"sb_chat_{idx}") or {}).get("turns", [])
-                          if t.get("role") == "assistant"],
-        "n_tests": _n_tests((ss.get(f"sb_chat_{idx}") or {}).get("turns", [])),
+        # Versions are first-class now: the trajectory is the version store,
+        # and the transcript is every version's own thread.
+        "rule_versions": [{"label": f"v{n + 1}", "rule": r}
+                          for n, r in enumerate(_vers(idx))],
+        "n_tests": sum(1 for th in _chats(idx).values()
+                       for t in th.get("turns", [])
+                       if t.get("role") == "assistant" and (t.get("rule") or "").strip()),
         "final_version": ss.get(f"sb_final_label_{idx}", ""),
-        "transcript": (ss.get(f"sb_chat_{idx}") or {}).get("turns", []),
+        "transcript": {label: th.get("turns", [])
+                       for label, th in _chats(idx).items()},
         "reflection": _reflection_answers(idx)}
     # One row per theme. Rewriting a theme replaces its row rather than adding a
     # second, whether that happens by picking it again from the menu or by
@@ -962,79 +1002,7 @@ def _render_scores(fb: dict | None, rubric: list[dict], idx: int,
                     '</div>', unsafe_allow_html=True)
 
 
-def _versions_for(idx: int, draft: str) -> list[tuple[str, str]]:
-    """Every rule version this case has seen, newest last, for the compare panes."""
-    turns = (st.session_state.get(f"sb_chat_{idx}") or {}).get("turns", [])
-    out: list[tuple[str, str]] = [("No rule yet", "")]
-    for t in turns:
-        if t.get("role") != "assistant" or not t.get("tested"):
-            continue
-        label, rule = t.get("version", ""), (t.get("rule") or "").strip()
-        if rule and rule not in [r for _, r in out]:
-            out.append((label, rule))
-    if draft and draft not in [r for _, r in out]:
-        out.append(("Your rule now", draft))
-    return out
 
-
-def _run_version_compare(idx: int, scenario: dict, question: str,
-                         left: str, right: str) -> None:
-    ss = st.session_state
-    ss[f"sb_vcmp_{idx}"] = {"question": question, "left": None, "right": None}
-    for slot, rule in (("left", left), ("right", right)):
-        data = llm.agent_reply(ss.sb_agent, _does(), ss.sb_audience, scenario,
-                               rule or None,
-                               [{"role": "user", "content": question}])
-        ss[f"sb_vcmp_{idx}"][slot] = (data.get("response") or "").strip()
-    store.log_event(_rid(), "themes", "version_compare",
-                    {"case_idx": idx, "question": question,
-                     "left_rule": left, "right_rule": right})
-
-
-def _render_version_compare(idx: int, scenario: dict, draft: str) -> None:
-    """Ask one question of two rule versions and read the answers side by side.
-
-    Min: "have people compare the baseline no rule yet versus rule version one
-    or version two. The single difference is really helpful." Two panes only,
-    because she raised the clutter problem in the same breath: "what if they
-    keep revising it five times."
-    """
-    ss = st.session_state
-    versions = _versions_for(idx, draft)
-    labels = [v[0] for v in versions]
-    rules = dict(versions)
-
-    with st.expander("Compare versions", expanded=bool(ss.get(f"sb_vcmp_{idx}"))):
-        st.caption("Ask the same question of two versions of your rule and see "
-                   "what actually changed.")
-        c1, c2 = st.columns(2, gap="small")
-        left = c1.selectbox("Left", labels, index=0, key=f"sb_vleft_{idx}")
-        right = c2.selectbox("Right", labels, index=len(labels) - 1,
-                             key=f"sb_vright_{idx}")
-        ex = scenario.get("example_exchange") or {}
-        q = st.text_input("Ask both", key=f"sb_vq_{idx}",
-                          value=ss.get(f"sb_vq_{idx}", ex.get("user_message", "")),
-                          placeholder="what should your child be able to ask?")
-        if st.button("Ask", key=f"sb_vgo_{idx}", disabled=not (q or "").strip()):
-            with st.spinner("Asking both versions..."):
-                _run_version_compare(idx, scenario, q.strip(),
-                                     rules.get(left, ""), rules.get(right, ""))
-
-        got = ss.get(f"sb_vcmp_{idx}")
-        if got:
-            st.markdown(f'<div class="np-muted" style="margin:8px 0 4px;">'
-                        f'<b>{_who()}:</b> {got["question"]}</div>',
-                        unsafe_allow_html=True)
-            p1, p2 = st.columns(2, gap="medium")
-            for pane, label, key in ((p1, left, "left"), (p2, right, "right")):
-                with pane:
-                    icon = (provenance.icon("baseline_reply")
-                            if not rules.get(label) else
-                            provenance.icon("rule_reply"))
-                    st.markdown(f'<div class="np-section-title">{label}{icon}</div>',
-                                unsafe_allow_html=True)
-                    st.markdown(f'<div class="np-card">{got[key] or ""}</div>',
-                                unsafe_allow_html=True)
 
 
 def _save_theme_rule(theme: str, cases: list[dict]) -> None:
@@ -1128,36 +1096,62 @@ def _ui_after(idx: int) -> None:
     _render_reflection(idx, "a", ss[f"sb_rqa_{idx}"])
 
 
-def _ui_rule(idx: int, height: int = 200, check: bool = False,
-             try_case: bool = False) -> None:
-    """The rule box. Which button accompanies it depends on the stage:
-    none while considering, Check while revising, Try while testing."""
+def _ui_rule(idx: int, height: int = 200) -> None:
+    """The plain rule box, for Consider + write only: the first draft has no
+    versions yet, so no dropdown until it is saved as v1 on leaving the stage."""
     section("Your rule for this theme")
-    draft = _kept_text(
+    _kept_text(
         f"sb_answer_{idx}", "Your rule", height=height,
         label_visibility="collapsed",
         placeholder="One rule that should hold across all three of these "
                     "conversations. Say what the AI should do, what it should "
-                    "not do, and how to handle the hard part.").strip()
+                    "not do, and how to handle the hard part.")
+
+
+def _save_version_click(idx: int) -> None:
+    _save_version(idx)
+
+
+def _ui_rule_versioned(idx: int, height: int = 170, check: bool = False) -> None:
+    """The rule box with its version dropdown on the title row.
+
+    The dropdown answers "which version is this?" at all times: selecting one
+    loads its text (Original loads empty), and "Save as new version" is the
+    single place versions are born after v1. Streamlit cannot overlay a widget
+    inside a text area, so "top right of the text box" renders as a compact
+    selectbox on the box's title row.
+    """
+    ss = st.session_state
+    labels = _vlabels(idx)
+    cur = ss.get(f"sb_vsel_{idx}") or (labels[-1] if len(labels) > 1 else ORIGINAL)
+    if cur not in labels:
+        cur = labels[-1]
+    ss[f"sb_vsel_{idx}"] = cur
+    head, dd = st.columns([2.4, 1], gap="small")
+    with head:
+        section("Your rule for this theme")
+    with dd:
+        st.selectbox("Version", labels, index=labels.index(cur),
+                     key=f"w_sb_vsel_{idx}", label_visibility="collapsed",
+                     on_change=_select_version, args=(idx,),
+                     help="Which version is in the box right now. Picking one "
+                          "loads it; Original is empty (no rule).")
+    draft = _kept_text(
+        f"sb_answer_{idx}", "Your rule", height=height,
+        label_visibility="collapsed",
+        placeholder="Edit the rule here, then save it as a new version.").strip()
+    sel = ss.get(f"sb_vsel_{idx}", ORIGINAL)
+    unchanged = draft == _vrule(idx, sel).strip()
+    b1, b2 = st.columns(2, gap="small")
+    b1.button("Save as new version", key=f"sb_savev_{idx}",
+              use_container_width=True, type="secondary",
+              disabled=(not draft) or unchanged,
+              help="Keeps the selected version and adds this text as the next one.",
+              on_click=_save_version_click, args=(idx,))
     if check:
-        st.button("Check my answer", key=f"sb_check_{idx}",
+        b2.button("Check my answer", key=f"sb_check_{idx}",
                   use_container_width=True, type="primary", disabled=not draft,
                   on_click=_flag, args=("_sb_check",))
-    if try_case:
-        st.button("Try it on a case", key=f"sb_test_{idx}",
-                  use_container_width=True, type="primary", disabled=not draft,
-                  help="Answers the first conversation again, following your rule.",
-                  on_click=_request_test, args=(idx,))
-
-
-def _ui_tried(idx: int, cases: list[dict], height: int = 260) -> None:
-    ss = st.session_state
-    if not (ss.get(f"sb_chat_{idx}") or {}).get("turns") or not cases:
-        st.caption("Try your rule on a case to start the conversation.")
-        return
-    section("Your rule, tried out")
-    with st.container(height=height, border=False):
-        _render_scenario_chat(idx, cases[0])
 
 
 # ---- stages ----------------------------------------------------------------
@@ -1179,10 +1173,11 @@ def _set_stage(idx: int, n: int) -> None:
 
 
 def _leave_consider(idx: int) -> None:
-    """Stage 0 -> 1 captures the first draft, before any feedback shaped it."""
+    """Stage 0 -> 1 captures the first draft and saves it as v1."""
     ss = st.session_state
     if not (ss.get(f"sb_first_{idx}") or "").strip():
         ss[f"sb_first_{idx}"] = (ss.get(f"sb_answer_{idx}") or "").strip()
+    _save_version(idx)   # "1 is the first rule"
     _set_stage(idx, 1)
 
 
@@ -1223,57 +1218,55 @@ def _render_stage_nav(idx: int) -> None:
 
 # ---- the Test stage: versions and the final pick ---------------------------
 
-def _final_options(idx: int) -> list[tuple[str, str]]:
-    """Versions that could be the final rule: every tested one plus the box."""
-    draft = (st.session_state.get(f"sb_answer_{idx}") or "").strip()
-    return [(label, rule) for label, rule in _versions_for(idx, draft)
-            if rule.strip()]
 
 
-def _load_version(idx: int) -> None:
-    """Put the selected version back into the rule box to keep working on it."""
-    ss = st.session_state
-    label = ss.get(f"sb_final_{idx}")
-    rule = dict(_final_options(idx)).get(label, "").strip()
-    if rule:
-        ss[f"sb_answer_{idx}"] = rule
-        ss[f"w_sb_answer_{idx}"] = rule
-        store.log_event(_rid(), "themes", "load_version",
-                        {"theme": ss.sb_theme, "label": label})
 
-
-def _ui_versions(idx: int) -> None:
-    """The left column while testing: every version, the final pick, reload.
+def _ui_final_panel(idx: int) -> None:
+    """The final-rule picker: the dropdown IS the final selection.
 
     Min: people may decide version four was the best of six, so the final
     version is chosen explicitly rather than assumed to be the last one.
     """
     ss = st.session_state
-    section("Your versions")
-    options = _final_options(idx)
-    if not options:
-        st.caption("Write a rule first; versions appear as you test it.")
+    section("Your final rule")
+    labels = _vlabels(idx, include_original=False)
+    if not labels:
+        st.caption("Save a version of your rule first.")
         return
-    labels = [label for label, _ in options]
-    if ss.get(f"sb_final_{idx}") not in labels:
-        ss[f"sb_final_{idx}"] = labels[-1]
-    st.radio("Your final rule", labels, key=f"sb_final_{idx}",
-             help="The version the comparisons will test and the export keeps.")
-    picked = dict(options).get(ss.get(f"sb_final_{idx}", ""), "")
-    if picked:
-        st.markdown(f'<div class="np-card-muted" style="font-size:13px;">'
-                    f'{picked}</div>', unsafe_allow_html=True)
+    cur = ss.get(f"sb_final_{idx}")
+    if cur not in labels:
+        cur = labels[-1]
+        ss[f"sb_final_{idx}"] = cur
+    pick = st.selectbox("Final version", labels, index=labels.index(cur),
+                        key=f"w_sb_final_{idx}", label_visibility="collapsed",
+                        help="The version the comparisons will test and the "
+                             "export keeps.")
+    ss[f"sb_final_{idx}"] = pick
+    st.markdown(f'<div class="np-card-muted" style="font-size:13px;">'
+                f'{_vrule(idx, pick)}</div>', unsafe_allow_html=True)
     st.button("Load this version into the box", key=f"sb_loadv_{idx}",
               type="secondary", use_container_width=True,
-              on_click=_load_version, args=(idx,))
+              on_click=_load_final_into_box, args=(idx,))
+
+
+def _load_final_into_box(idx: int) -> None:
+    ss = st.session_state
+    label = ss.get(f"sb_final_{idx}", "")
+    rule = _vrule(idx, label)
+    if rule:
+        ss[f"sb_answer_{idx}"] = rule
+        ss[f"w_sb_answer_{idx}"] = rule
+        ss[f"sb_vsel_{idx}"] = label
+        ss[f"w_sb_vsel_{idx}"] = label
+        store.log_event(_rid(), "themes", "load_version",
+                        {"theme": ss.sb_theme, "label": label})
 
 
 def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
-    """Save the MARKED final version and move on to the comparisons."""
+    """Save the marked final version and move on to the comparisons."""
     ss = st.session_state
     missing = _unanswered(idx, "b")
-    options = dict(_final_options(idx))
-    final = options.get(ss.get(f"sb_final_{idx}", ""), "").strip()
+    final = _vrule(idx, ss.get(f"sb_final_{idx}", "")).strip()
     st.button("Save this rule and test it", key=f"sb_save_{idx}", type="primary",
               use_container_width=True, disabled=bool(missing) or not final,
               on_click=_save_final, args=(theme, cases, idx))
@@ -1287,7 +1280,7 @@ def _save_final(theme: str, cases: list[dict], idx: int) -> None:
     """The marked version becomes the rule of record before saving."""
     ss = st.session_state
     label = ss.get(f"sb_final_{idx}", "")
-    rule = dict(_final_options(idx)).get(label, "").strip()
+    rule = _vrule(idx, label).strip()
     if rule:
         ss[f"sb_answer_{idx}"] = rule
         ss[f"w_sb_answer_{idx}"] = rule
@@ -1298,16 +1291,33 @@ def _save_final(theme: str, cases: list[dict], idx: int) -> None:
 # ---- the workspace ---------------------------------------------------------
 
 def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
-    """Split: the case holds the left, the work steps down the right."""
+    """Split: the case holds the left, the work steps down the right.
+
+    The Test stage breaks the split: the final-rule picker and the working box
+    share the top row, and below them three columns each chat with one version,
+    side by side.
+    """
     ss = st.session_state
     cur = _stage(idx)
     draft = (ss.get(f"sb_answer_{idx}") or "").strip()
+    if cur == 3:
+        _render_stage_rail(idx)
+        left, right = st.columns([1, 1.3], gap="medium")
+        with left:
+            _ui_final_panel(idx)
+        with right:
+            _ui_rule_versioned(idx, height=130)
+        st.divider()
+        c0, c1, c2 = st.columns(3, gap="medium")
+        for k, col in enumerate((c0, c1, c2)):
+            with col:
+                _ui_compare_column(idx, k, scenario)
+        _render_stage_nav(idx)
+        _ui_save(theme, cases, idx)
+        return
     left, right = st.columns(_C_SPLIT[cur], gap="medium")
     with left:
-        if cur == 3:
-            _ui_versions(idx)
-        else:
-            _ui_cases(cases)
+        _ui_cases(cases)
     with right:
         _render_stage_rail(idx)
         if cur == 0:
@@ -1315,7 +1325,7 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
             st.caption("With this information, write your rule.")
             _ui_rule(idx, height=150)
         elif cur == 1:
-            _ui_rule(idx, height=170, check=True)
+            _ui_rule_versioned(idx, height=170, check=True)
             with st.expander("Your reflections"):
                 answered = [r for r in _reflection_answers(idx)
                             if r["placement"] == "before"]
@@ -1325,15 +1335,12 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
                     st.markdown(f"**{r['question']}**")
                     st.markdown(r["answer"])
             _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
-        elif cur == 2:
-            _ui_after(idx)
         else:
-            _ui_rule(idx, height=130, try_case=True)
-            _ui_tried(idx, cases, 230)
-            _render_version_compare(idx, scenario, draft)
+            # Sharpen: the rule stays in the exact same spot as Score + revise,
+            # with the after-questions pushed below it.
+            _ui_rule_versioned(idx, height=170)
+            _ui_after(idx)
         _render_stage_nav(idx)
-        if cur == len(_STAGES) - 1:
-            _ui_save(theme, cases, idx)
 
 
 def _render_theme_workspace() -> None:
@@ -1386,14 +1393,10 @@ def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> No
                         {"theme": ss.sb_theme, "draft": draft,
                          "levels": _levels_by_name(ss[f"sb_fb_{idx}"]),
                          "n_check": ss[f"sb_nrev_{idx}"]})
-    if ss.get("_sb_test") == idx:
-        del ss["_sb_test"]
-        _run_test(idx, scenario, draft)
-    pending = ss.get("_sb_followup")
+    pending = ss.get("_sb_ask")
     if pending and pending[0] == idx:
-        del ss["_sb_followup"]
-        _run_followup(idx, scenario, draft, pending[1])
-        ss[f"sb_followup_{idx}"] = ""
+        del ss["_sb_ask"]
+        _ask_version(idx, pending[1], scenario, pending[2])
 
 
 def render_themes() -> None:
@@ -1535,6 +1538,7 @@ def _theme_after_reveal(cmp: dict, i: int) -> None:
         live = (ss.get(f"sb_answer_{idx}") or "").strip()
         stored = (_theme_answer(theme) or {}).get("ideal_behavior", "")
         if live and live != stored:
+            _save_version(idx, live)   # the edit becomes a version too
             cases = _theme_cases(theme)
             _record_answer(cases[0] if cases else {"id": -1, "title": theme,
                                                    "situation": "",

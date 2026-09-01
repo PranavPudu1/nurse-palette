@@ -26,9 +26,13 @@ testing an AI, seeding a benchmark across domains, or personalizing an agent.
      one click away in an accordion. Rubric design follows iRULER (Bai et al.,
      CHI '26) and Driscoll et al. (CHI '26); see docs/design-rationale.md.
    - **Sharpen**: optional after-questions (a placeholder that may be cut).
-   - **Test**: chat against the rule (the two testing paths follow PolicyPad,
-     Feng et al., CHI '26), browse every version your testing produced, reload
-     any of them, and **mark one as final** - the marked version is what saves.
+   - **Test**: the rule box carries a **version dropdown** (Original = no
+     rule, v1 = the first draft, saved automatically); "Save as new version"
+     is how versions are born after that. Below, **three compare columns**
+     each chat with one version in its own persistent thread (the per-version
+     testing idea follows PolicyPad, Feng et al., CHI '26), so replies are
+     always traceable to a version. A final-rule dropdown picks which version
+     saves - it is not always the last one.
    Saving leads into **three comparison rounds for that theme**: round 1 you
    pick between two close-call behaviors and say why; round 2 reveals what
    your rule chose and hands the rule box back so you can close the gap; round

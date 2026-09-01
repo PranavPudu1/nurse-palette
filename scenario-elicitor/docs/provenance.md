@@ -70,6 +70,9 @@ with no source is worth knowing about too.
 | The workspace is the split layout, staged | Every theme | Min picked it from five prototypes: the case stays pinned left while the work steps down the right | Min's review (Sep 1) |
 | The rule box sits directly below the questions | Consider + write | Min's fix for "they cannot see their answer": the reflections stay on screen while the first draft is written | Min's review (Sep 1) |
 | Testing is the last stage, with versions and a final pick | The Test stage | People iterate by chatting against the rule; the final version is chosen explicitly because it is not always the last one | Min's review (Sep 1) |
+| Every rule box carries a version dropdown | Score + revise, Sharpen, Test | It was unclear which version was in the box or produced a reply; Original is the no-rule baseline and v1 is the first draft | user direction (Sep 2) |
+| Each version keeps its own persistent chat thread | The Test stage's compare columns | Switching versions switches threads and nothing is lost, so a reply always traces to the version that produced it | user direction (Sep 2) |
+| Three side-by-side compare columns replace the single chat | The Test stage | Pick a version per column and ask all of them the same things; the case's own question seeds an empty thread | user direction (Sep 2) |
 | A round-2 edit is re-recorded immediately | The theme rounds | Otherwise the export and later rounds keep the pre-edit rule while the person believes they revised it | ours |
 
 ## Study mechanics

@@ -183,6 +183,8 @@ _SNAPSHOT_PREFIXES = ("sb_answer_", "sb_first_", "sb_fb_", "sb_lastfb_",
                       "sb_stage_", "sb_final_",
                       "sb_nrev_", "sb_cnote_",
                       "sb_chat_", "sb_pick_", "sb_vq_", "sb_vcmp_",
+                      # first-class versions and their per-version threads
+                      "sb_vers_", "sb_vsel_", "sb_chats_", "sb_cmpv_",
                       # reflective questions and the answers to them
                       "sb_rqb_", "sb_rqa_", "sb_rab_", "sb_raa_", "sb_rap_", "sb_rai_",
                       )

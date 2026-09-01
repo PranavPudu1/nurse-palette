@@ -8,6 +8,29 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.6 — 2026-09-02 — first-class versions
+
+- **A version dropdown on every rule box** (Score + revise, Sharpen, Test):
+  Original is the empty no-rule baseline, v1 is the first draft (saved
+  automatically on leaving Consider + write), and "Save as new version" is the
+  single creation point after that. A round-2 edit appends a version too, so
+  nothing untitled ever speaks.
+- **Per-version persistent chats.** Each version owns its thread; switching the
+  dropdown switches threads and loses nothing; every reply is stamped with its
+  version.
+- **The Test stage redesigned**: final-rule dropdown (with preview and "load
+  into the box") beside the working box, and below them three compare columns,
+  each chatting with one selected version. The single chat pane, the "Try it on
+  a case" button, and the Compare-versions expander are gone.
+- **Sharpen keeps the rule box** in the same spot as Score + revise, questions
+  below it.
+- Export: `rule_versions` is now the version store `[{label, rule}]`, the
+  transcript is every thread keyed by version, and the final label is recorded.
+
+Deployment: (fill in after `railway up`).
+
+---
+
 ## v0.5 — 2026-09-01 — the split workspace, staged; no end-of-session rounds
 
 Implements Min's calls from the Sep 1 review, verbatim where possible.
