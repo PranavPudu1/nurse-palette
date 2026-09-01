@@ -8,6 +8,27 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.7 — 2026-09-02 — usable on phones
+
+- **Mobile sweep, CSS only.** All rules live inside a max-width 700px media
+  query, so desktop rendering is untouched. On phones: tighter page padding,
+  smaller headings/cards/pills, step pills wrapping two per row, 16px inputs
+  (stops the iOS focus zoom), and fixed-height chat panes grow with their
+  content (capped at half the viewport) instead of becoming nested scroll
+  traps once the columns stack.
+- **Gating moved from disabled buttons to click-time validation.** On phones,
+  Continue never enabled on the intake screen: text boxes commit on blur, and
+  a disabled button cannot receive the tap that would blur them. Continue,
+  stage Next, Save as new version, Check my answer, and Save-and-test are now
+  always tappable; a blocked tap stays put and says what is missing. Also
+  fixes a latent desktop bug where callbacks read text one interaction stale
+  (a round-2 edit followed immediately by Save could record the pre-edit
+  rule).
+
+Deployment: `a65b1f48-d38a-4610-96e2-89e5c6c134ea`.
+
+---
+
 ## v0.6 — 2026-09-02 — first-class versions
 
 - **A version dropdown on every rule box** (Score + revise, Sharpen, Test):
