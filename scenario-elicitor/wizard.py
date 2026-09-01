@@ -181,8 +181,9 @@ def _stepper_html(steps: list, cur: int) -> str:
             f'font-size:11.5px;font-weight:{wt};line-height:1.25;'
             f'display:flex;align-items:center;justify-content:center;">'
             f'<span style="opacity:0.7;">{lead}</span>&nbsp;{short}</div>')
-    return (eyebrow + '<div style="display:flex;gap:6px;margin-bottom:2px;'
-            'align-items:stretch;">' + "".join(pills) + "</div>")
+    return (eyebrow + '<div class="np-stepper" style="display:flex;gap:6px;'
+            'margin-bottom:2px;align-items:stretch;">' + "".join(pills)
+            + "</div>")
 
 
 def _stepper() -> None:

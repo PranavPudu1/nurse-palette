@@ -216,6 +216,30 @@ details, .stExpander {{ border-radius: 12px !important; }}
         color: {MUTED_FG};
         margin-bottom: 10px;
     }}
+    /* Mobile sweep. Everything here is invisible at desktop widths, so the
+       desktop layout stays exactly as reviewed. */
+    .block-container {{
+        padding-left: 0.9rem !important;
+        padding-right: 0.9rem !important;
+        padding-top: 1rem;
+    }}
+    /* Fixed-height panes (the chats) become nested scroll traps once the
+       columns stack; let them grow with their content, capped so one long
+       thread cannot swallow the page. !important outranks the inline style. */
+    div[data-testid="stVerticalBlockBorderWrapper"][style*="height"] {{
+        height: auto !important;
+        max-height: 50vh;
+    }}
+    /* iOS zooms the page when a focused input's font is under 16px. */
+    .stTextArea textarea, .stTextInput input {{
+        font-size: 16px !important;
+    }}
+    .np-h1 {{ font-size: 22px; }}
+    .np-card, .np-card-muted {{ padding: 12px 14px; }}
+    .np-pill {{ font-size: 10px; padding: 2px 8px; }}
+    /* The step pills go two per row instead of shrinking to slivers. */
+    .np-stepper {{ flex-wrap: wrap; }}
+    .np-stepper > div {{ flex: 1 1 46%; min-width: 46%; }}
 }}
 
 header[data-testid="stHeader"] {{ background: transparent; }}
