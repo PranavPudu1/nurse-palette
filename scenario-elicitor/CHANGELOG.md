@@ -8,6 +8,39 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.5 — 2026-09-01 — the split workspace, staged; no end-of-session rounds
+
+Implements Min's calls from the Sep 1 review, verbatim where possible.
+
+- **Split is the only layout.** The four other prototypes and their switcher
+  are gone; the case stays pinned on the left while the work steps down the
+  right.
+- **Four stages, in her order.** Consider + write (the rule box directly below
+  the questions, so the answers stay visible while writing), Score + revise
+  (rubric plus a reflections accordion), Sharpen (placeholder after-questions
+  that may be cut), Test (chat against the rule, browse and reload versions,
+  and mark ONE as final; the marked version is what saves).
+- **No all-themes rounds.** Min: after the last theme the session goes straight
+  to export. The policy synthesis and its three end-of-session rounds are
+  removed; per-theme rounds stay. 18 comparisons per session, down from 27.
+- **Round-2 edits are re-recorded** the moment they happen, so the export, the
+  menu, and later rounds all test what the person actually revised.
+- Defects: version-compare read the wrong response field and always rendered
+  empty panes; theme-menu buttons shared the sb_pick_ snapshot prefix and could
+  be assigned on resume; the stage and final-version keys were not snapshotted;
+  the dead description input threaded an always-empty string into three
+  prompts.
+- A narrow-viewport note appears on the gate when columns stack; full mobile
+  design is deferred until Winnie says whether parents would really use a
+  phone.
+- New doc: `docs/operationalization-prior-work.md` — Botender ships elicited
+  policies into a live bot with no guardrails; PolicyPad stops at a sandbox on
+  purpose. Neither builds an evaluation layer, so proof-of-concept scope holds.
+
+Deployment: `30c4c2e8-ee90-4f40-9530-7c9e0efe4260`.
+
+---
+
 ## v0.4 — 2026-08-25 — two-level testing, layout prototypes, version control
 
 First version with a git history. Everything before this was reconstructed from
