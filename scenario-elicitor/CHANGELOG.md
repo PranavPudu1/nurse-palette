@@ -27,7 +27,7 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 - Export: `rule_versions` is now the version store `[{label, rule}]`, the
   transcript is every thread keyed by version, and the final label is recorded.
 
-Deployment: (fill in after `railway up`).
+Deployment: `ee079327-0252-4cfa-b79a-d403a9054db9`.
 
 ---
 
