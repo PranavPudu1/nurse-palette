@@ -37,8 +37,6 @@ STEP_LIBRARY: dict[str, dict] = {
     "agent":     {"title": "The agent", "short": "Choose the agent"},
     "describe":  {"title": "How it should behave", "short": "Say who it is for"},
     "themes":    {"title": "What worries you", "short": "Write your rules"},
-    "confirm":   {"title": "Confirm with comparisons",
-                  "short": "Compare two behaviors"},
     "output":    {"title": "Your preferences", "short": "Export"},
 }
 
@@ -49,13 +47,13 @@ ARMS: dict[str, dict] = {
         "label": "Top-down",
         "blurb": "Write the policy for each situation; reflective questions and "
                  "the rubric prompt revision.",
-        "steps": ["agent", "describe", "themes", "confirm", "output"],
+        "steps": ["agent", "describe", "themes", "output"],
     },
     "c2": {
         "label": "Bottom-up",
         "blurb": "Make pairwise choices and explain them; a model writes the "
                  "policy from those reasons.",
-        "steps": ["agent", "describe", "themes", "confirm", "output"],
+        "steps": ["agent", "describe", "themes", "output"],
     },
     "base_a": {
         "label": "Baseline, free text",
@@ -65,7 +63,7 @@ ARMS: dict[str, dict] = {
     "base_b": {
         "label": "Baseline, comparisons only",
         "blurb": "Make pairwise choices. No policy is written by the person.",
-        "steps": ["agent", "describe", "themes", "confirm", "output"],
+        "steps": ["agent", "describe", "themes", "output"],
     },
 }
 

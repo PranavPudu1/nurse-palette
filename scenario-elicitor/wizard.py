@@ -91,19 +91,10 @@ def init() -> None:
     ss.setdefault("sb_tround", 1)            # round within a theme's testing loop
     ss.setdefault("sb_themes_done", [])      # theme names with a saved rule
     ss.setdefault("sb_examples", {})        # case_id -> {"text": ...} example cache
-    ss.setdefault("sb_cidx", 0)             # position within the current round
     ss.setdefault("sb_confirm", [])         # every pick, across all rounds
     ss.setdefault("sb_confirm_cache", {})   # legacy, kept so old snapshots load
-    # A snapshot taken before the comparison step became three rounds has a
-    # position but no round. Its position indexes the OLD single-round list, so
-    # carrying it in would treat round 1 as already finished and skip it.
-    if "sb_round" not in ss:
-        ss["sb_cidx"] = 0
-    ss.setdefault("sb_round", 1)            # comparison round: 1, 2 or 3
-    ss.setdefault("sb_cmp", {})             # round -> [comparison, ...]
-    ss.setdefault("sb_revealed", {})        # "round_index" -> model answer shown
-    ss.setdefault("sb_policy", None)        # the one policy, sharpened over time
-    ss.setdefault("sb_policy_log", [])      # every version, with what changed
+    ss.setdefault("sb_cmp", {})             # "theme:round" -> [comparison, ...]
+    ss.setdefault("sb_revealed", {})        # reveal flags per comparison
     ss.setdefault("sb_rubric", copy.deepcopy(prompts.RUBRIC))  # editable per session
     ss.setdefault("sb_submitted", False)    # frozen after final submission
     _migrate_pre_themes()
@@ -127,10 +118,6 @@ def _migrate_pre_themes() -> None:
     ss.sb_confirm = []
     ss.sb_cmp = {}
     ss.sb_revealed = {}
-    ss.sb_policy = None
-    ss.sb_policy_log = []
-    ss.sb_round = 1
-    ss.sb_cidx = 0
     ss.sb_theme = None
     ss.sb_tphase = "write"
     ss.sb_themes_done = []

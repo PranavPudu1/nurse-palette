@@ -730,24 +730,7 @@ POLICY_MIN_PRINCIPLES = 3
 POLICY_MAX_PRINCIPLES = 8
 
 
-def policy_cap(n_answers: int) -> int:
-    """How many principles the policy may contain."""
-    return max(POLICY_MIN_PRINCIPLES, min(POLICY_MAX_PRINCIPLES, n_answers + 1))
 
-
-POLICY_SCHEMA = {
-    "name": "policy",
-    "strict": True,
-    "schema": {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "principles": {"type": "array", "items": {"type": "string"}},
-            "what_changed": {"type": "string"},
-        },
-        "required": ["principles", "what_changed"],
-    },
-}
 
 POLICY_PICK_SCHEMA = {
     "name": "policy_pick",
@@ -805,74 +788,6 @@ def _pick_lines(picks: list[dict]) -> str:
     return "\n".join(out) or "(none)"
 
 
-def policy_write_messages(agent: str, does: str, audience: str, rubric: list[dict],
-                          answers: list[dict], picks: list[dict],
-                          cap: int) -> list[dict]:
-    """Write the policy from the per-case rules plus the round-1 picks."""
-    system = (
-        f"A person has been specifying how an AI agent ({agent.strip()}: "
-        f"{does.strip()}) should behave.{_audience_clause(audience)}\n\n"
-        "Below is everything they have produced: the rule they wrote for each "
-        "situation, anything they said about why, and the choices they made "
-        "between pairs of agent responses with their reasons.\n\n"
-        f"Write a single policy of AT MOST {cap} principles that captures what "
-        "THIS person wants. Rules for writing it:\n"
-        "- Every principle must be traceable to something they actually wrote or "
-        "chose. Do not add preferences they never expressed.\n"
-        "- Where their choices and their written rules point the same way, state "
-        "the principle once rather than twice.\n"
-        "- Where they appear to conflict, follow what they CHOSE over what they "
-        "wrote, and keep the principle narrow enough to be honest about it.\n"
-        "- Each principle must be specific enough for a model to act on: say what "
-        "to do, and where useful what not to do.\n\n"
-        "The policy is judged against this rubric, so write to it:\n"
-        f"{rubric_as_text(rubric)}\n\n"
-        "Return 'what_changed' as one short line naming what this policy is based "
-        "on. Do not use em dashes."
-    )
-    user = (f"The rules they wrote:\n{_answer_lines(answers)}\n\n"
-            f"The choices they made:\n{_pick_lines(picks)}")
-    return [{"role": "system", "content": system},
-            {"role": "user", "content": user}]
-
-
-def policy_revise_messages(agent: str, does: str, audience: str,
-                           rubric: list[dict], policy: dict, instance: str,
-                           option_a: dict, option_b: dict, model_choice: str,
-                           person_choice: str, critique: str,
-                           cap: int) -> list[dict]:
-    """Sharpen the SAME policy using the person's critique of one decision."""
-    system = (
-        f"A person is sharpening the policy for an AI agent ({agent.strip()}: "
-        f"{does.strip()}).{_audience_clause(audience)}\n\n"
-        "The agent applied their current policy to the situation below and made a "
-        "choice. The person has said what they think of that choice and how it "
-        "should behave differently.\n\n"
-        "Revise the policy so the agent would decide the way this person wants. "
-        "Rules:\n"
-        "- This is a REVISION, not a rewrite. Keep every principle that their "
-        "critique does not bear on, in their existing wording.\n"
-        "- Change or add as little as possible: prefer sharpening an existing "
-        "principle over adding a new one.\n"
-        "- Do not invent preferences the critique does not support.\n"
-        f"- At most {cap} principles in total.\n\n"
-        "The policy is judged against this rubric, so keep it satisfying it:\n"
-        f"{rubric_as_text(rubric)}\n\n"
-        "Return 'what_changed' as one short line naming exactly what you changed "
-        "and why. Do not use em dashes."
-    )
-    user = (
-        f"Current policy:\n{_policy_lines(policy)}\n\n"
-        f"Situation: {instance}\n"
-        f"Option A: {option_a.get('text', '')}\n"
-        f"Option B: {option_b.get('text', '')}\n"
-        f"The agent chose: {model_choice}\n"
-        f"The person chose: {person_choice}\n\n"
-        f"What the person said about the agent's choice:\n"
-        f'"""\n{(critique or "").strip()}\n"""'
-    )
-    return [{"role": "system", "content": system},
-            {"role": "user", "content": user}]
 
 
 def policy_pick_messages(agent: str, does: str, audience: str, policy: dict,

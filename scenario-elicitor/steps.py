@@ -534,6 +534,7 @@ def _record_answer(scenario: dict, theme: str = "",
                           for t in (ss.get(f"sb_chat_{idx}") or {}).get("turns", [])
                           if t.get("role") == "assistant"],
         "n_tests": _n_tests((ss.get(f"sb_chat_{idx}") or {}).get("turns", [])),
+        "final_version": ss.get(f"sb_final_label_{idx}", ""),
         "transcript": (ss.get(f"sb_chat_{idx}") or {}).get("turns", []),
         "reflection": _reflection_answers(idx)}
     # One row per theme. Rewriting a theme replaces its row rather than adding a
@@ -1035,7 +1036,7 @@ def _run_version_compare(idx: int, scenario: dict, question: str,
         data = llm.agent_reply(ss.sb_agent, _does(), ss.sb_audience, scenario,
                                rule or None,
                                [{"role": "user", "content": question}])
-        ss[f"sb_vcmp_{idx}"][slot] = (data.get("reply") or "").strip()
+        ss[f"sb_vcmp_{idx}"][slot] = (data.get("response") or "").strip()
     store.log_event(_rid(), "themes", "version_compare",
                     {"case_idx": idx, "question": question,
                      "left_rule": left, "right_rule": right})
@@ -1105,48 +1106,20 @@ def _save_theme_rule(theme: str, cases: list[dict]) -> None:
     ss.sb_tround = 1
     ss.sb_tcidx = 0
 
-
 # ---------------------------------------------------------------------------
-# The workspace, in four layouts
+# The workspace: the split layout, staged as the meeting set it
 # ---------------------------------------------------------------------------
-# Four prototypes exist so Min can be shown the options rather than described
-# them. They are a review affordance, not a feature: the switcher only appears
-# in test sessions.
-#
-# All four compose the same primitives below and write the same session keys, so
-# switching mid-theme cannot lose work and no layout can pass a test the others
-# fail. What differs is only how each earns space, because the hard constraint
-# is that a theme must fit one viewport without the page scrolling, and the
-# case, its conversation, the questions, the rule box and the rubric do not fit
-# together at any honest font size.
+# Min chose the split prototype and fixed the stage order, so the other
+# prototypes and their switcher are gone. The case holds the left column and
+# never moves; the work steps down the right through four stages:
+#   1. Consider + write   the questions first, the rule box directly below
+#                         them, so the answers stay visible while writing
+#   2. Score + revise     the same rule box checked against the rubric, with
+#                         the reflections one click away in an accordion
+#   3. Sharpen            the after-questions alone; a placeholder Min may cut
+#   4. Test               the chat is the stage: try the rule, browse and
+#                         reload versions, and mark ONE as final before saving
 
-LAYOUTS = {
-    "A": ("Staged", "One step at a time under a pinned case."),
-    "B": ("Workbench", "Everything visible at once, in three columns."),
-    "C": ("Split", "Case holds the left half; work steps down the right."),
-    "D": ("Conversation", "The chat is the page; work docks beneath it."),
-    "O": ("Original", "What was live before this pass, for comparison."),
-}
-_DEFAULT_LAYOUT = "A"
-
-
-def _layout() -> str:
-    got = st.session_state.get("sb_layout")
-    return got if got in LAYOUTS else _DEFAULT_LAYOUT
-
-
-def _render_layout_switcher() -> None:
-    """Visible only in test sessions. A participant must never see this."""
-    if not st.session_state.get("resp_test"):
-        return
-    keys = list(LAYOUTS)
-    st.radio("Layout prototype", keys, key="sb_layout", horizontal=True,
-             index=keys.index(_layout()),
-             format_func=lambda k: f"{k} · {LAYOUTS[k][0]}")
-    st.caption(LAYOUTS[_layout()][1])
-
-
-# ---- the pieces every layout is built from --------------------------------
 
 def _ui_cases(cases: list[dict]) -> None:
     """The theme's cases as conversations, one per tab.
@@ -1190,18 +1163,26 @@ def _ui_before(idx: int, scenario: dict) -> None:
 
 
 def _ui_after(idx: int) -> None:
-    """The questions asked about what was actually written. Only after a check."""
+    """The after-questions, alone on their stage. A placeholder Min may cut.
+
+    They only exist after the first rubric check generates them; before that
+    the stage says so instead of sitting empty.
+    """
     ss = st.session_state
-    if not ss.get(f"sb_rqa_{idx}"):
-        return
     section("Now that you have written it")
-    st.caption("These ask about your reasoning, not whether the rule is good.")
+    if not ss.get(f"sb_rqa_{idx}"):
+        st.caption("These questions unlock after you check your rule on the "
+                   "previous stage. They are optional either way.")
+        return
+    st.caption("These ask about your reasoning, not whether the rule is good. "
+               "They are optional.")
     _render_reflection(idx, "a", ss[f"sb_rqa_{idx}"])
 
 
-def _ui_rule(idx: int, height: int = 200) -> None:
-    """The rule box and the two things you can do with it."""
-    ss = st.session_state
+def _ui_rule(idx: int, height: int = 200, check: bool = False,
+             try_case: bool = False) -> None:
+    """The rule box. Which button accompanies it depends on the stage:
+    none while considering, Check while revising, Try while testing."""
     section("Your rule for this theme")
     draft = _kept_text(
         f"sb_answer_{idx}", "Your rule", height=height,
@@ -1209,41 +1190,35 @@ def _ui_rule(idx: int, height: int = 200) -> None:
         placeholder="One rule that should hold across all three of these "
                     "conversations. Say what the AI should do, what it should "
                     "not do, and how to handle the hard part.").strip()
-    b1, b2 = st.columns(2, gap="small")
-    b1.button("Check my answer", key=f"sb_check_{idx}", use_container_width=True,
-              type="primary", disabled=not draft, on_click=_flag,
-              args=("_sb_check",))
-    b2.button("Try it on a case", key=f"sb_test_{idx}", use_container_width=True,
-              type="secondary", disabled=not draft,
-              help="Answers the first conversation again, following your rule.",
-              on_click=_request_test, args=(idx,))
+    if check:
+        st.button("Check my answer", key=f"sb_check_{idx}",
+                  use_container_width=True, type="primary", disabled=not draft,
+                  on_click=_flag, args=("_sb_check",))
+    if try_case:
+        st.button("Try it on a case", key=f"sb_test_{idx}",
+                  use_container_width=True, type="primary", disabled=not draft,
+                  help="Answers the first conversation again, following your rule.",
+                  on_click=_request_test, args=(idx,))
 
 
 def _ui_tried(idx: int, cases: list[dict], height: int = 260) -> None:
     ss = st.session_state
     if not (ss.get(f"sb_chat_{idx}") or {}).get("turns") or not cases:
+        st.caption("Try your rule on a case to start the conversation.")
         return
     section("Your rule, tried out")
     with st.container(height=height, border=False):
         _render_scenario_chat(idx, cases[0])
 
 
-def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
-    ss = st.session_state
-    missing = _unanswered(idx, "b")
-    no_rule = not (ss.get(f"sb_answer_{idx}") or "").strip()
-    st.button("Save this rule and test it", key=f"sb_save_{idx}", type="primary",
-              use_container_width=True, disabled=bool(missing) or no_rule,
-              on_click=_save_theme_rule, args=(theme, cases))
-    if missing:
-        st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
-    elif no_rule:
-        st.caption("Write your rule to continue.")
+# ---- stages ----------------------------------------------------------------
 
+_STAGES = ("Consider + write", "Score + revise", "Sharpen", "Test")
 
-# ---- stage handling, for the layouts that step ----------------------------
-
-_STAGES = ("Consider", "Write", "Sharpen")
+# How the two columns split, by stage. The case stays on the left except while
+# testing, when the versions take its place (the conversation lives in the
+# chat there). The working column widens where the work is.
+_C_SPLIT = {0: [1, 1.7], 1: [1, 1.3], 2: [1, 1.3], 3: [1, 1.6]}
 
 
 def _stage(idx: int) -> int:
@@ -1252,6 +1227,14 @@ def _stage(idx: int) -> int:
 
 def _set_stage(idx: int, n: int) -> None:
     st.session_state[f"sb_stage_{idx}"] = max(0, min(len(_STAGES) - 1, n))
+
+
+def _leave_consider(idx: int) -> None:
+    """Stage 0 -> 1 captures the first draft, before any feedback shaped it."""
+    ss = st.session_state
+    if not (ss.get(f"sb_first_{idx}") or "").strip():
+        ss[f"sb_first_{idx}"] = (ss.get(f"sb_answer_{idx}") or "").strip()
+    _set_stage(idx, 1)
 
 
 def _render_stage_rail(idx: int) -> None:
@@ -1266,158 +1249,142 @@ def _render_stage_rail(idx: int) -> None:
 
 
 def _render_stage_nav(idx: int) -> None:
-    """Forward is gated on the questions; back never is."""
+    """Forward out of Consider + write needs the questions AND a first draft;
+    everything else is free. Back never gates."""
+    ss = st.session_state
     cur = _stage(idx)
     missing = _unanswered(idx, "b") if cur == 0 else []
+    no_rule = cur == 0 and not (ss.get(f"sb_answer_{idx}") or "").strip()
     c1, c2 = st.columns([1, 1], gap="small")
     if cur > 0:
         c1.button("Back", key=f"sb_stback_{idx}_{cur}", use_container_width=True,
                   type="secondary", on_click=_set_stage, args=(idx, cur - 1))
     if cur < len(_STAGES) - 1:
+        on_click = _leave_consider if cur == 0 else _set_stage
+        args = (idx,) if cur == 0 else (idx, cur + 1)
         c2.button(f"Next: {_STAGES[cur + 1]}", key=f"sb_stnext_{idx}_{cur}",
                   use_container_width=True, type="primary",
-                  disabled=bool(missing),
-                  on_click=_set_stage, args=(idx, cur + 1))
+                  disabled=bool(missing) or no_rule,
+                  on_click=on_click, args=args)
     if missing:
         st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
+    elif no_rule:
+        st.caption("With this information, write your rule to continue.")
 
 
-# ---- the four layouts ------------------------------------------------------
+# ---- the Test stage: versions and the final pick ---------------------------
 
-def _layout_a(idx, theme, cases, scenario) -> None:
-    """Staged: the case is pinned and one working block sits under it."""
-    _ui_cases(cases)
-    st.divider()
-    _render_stage_rail(idx)
-    cur = _stage(idx)
-    if cur == 0:
-        _ui_before(idx, scenario)
-    elif cur == 1:
-        left, right = st.columns([1.3, 1], gap="medium")
-        with left:
-            _ui_rule(idx, height=220)
-        with right:
-            _render_scores(st.session_state.get(f"sb_fb_{idx}"),
-                           st.session_state.sb_rubric, idx,
-                           (st.session_state.get(f"sb_answer_{idx}") or "").strip())
-    else:
-        left, right = st.columns([1, 1], gap="medium")
-        with left:
-            _ui_after(idx)
-            _ui_tried(idx, cases, 220)
-        with right:
-            _render_version_compare(idx, scenario,
-                                    (st.session_state.get(f"sb_answer_{idx}")
-                                     or "").strip())
-    _render_stage_nav(idx)
-    if cur == len(_STAGES) - 1:
-        _ui_save(theme, cases, idx)
+def _final_options(idx: int) -> list[tuple[str, str]]:
+    """Versions that could be the final rule: every tested one plus the box."""
+    draft = (st.session_state.get(f"sb_answer_{idx}") or "").strip()
+    return [(label, rule) for label, rule in _versions_for(idx, draft)
+            if rule.strip()]
 
 
-def _layout_b(idx, theme, cases, scenario) -> None:
-    """Workbench: everything at once, three columns, nothing hidden."""
+def _load_version(idx: int) -> None:
+    """Put the selected version back into the rule box to keep working on it."""
     ss = st.session_state
-    draft = (ss.get(f"sb_answer_{idx}") or "").strip()
-    scores, middle, asks = st.columns([1, 1.35, 1], gap="medium")
-    with scores:
-        _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
-    with middle:
-        _ui_cases(cases)
-        _ui_rule(idx, height=170)
-    with asks:
-        _ui_before(idx, scenario)
-        _ui_after(idx)
-    _ui_save(theme, cases, idx)
+    label = ss.get(f"sb_final_{idx}")
+    rule = dict(_final_options(idx)).get(label, "").strip()
+    if rule:
+        ss[f"sb_answer_{idx}"] = rule
+        ss[f"w_sb_answer_{idx}"] = rule
+        store.log_event(_rid(), "themes", "load_version",
+                        {"theme": ss.sb_theme, "label": label})
 
 
-# How the two columns split, by stage. The case stays on the left throughout,
-# but it does not need half the screen while someone is typing three answers
-# into the other half, so the working column widens where the work is.
-_C_SPLIT = {0: [1, 1.7], 1: [1, 1.3], 2: [1, 1.3]}
+def _ui_versions(idx: int) -> None:
+    """The left column while testing: every version, the final pick, reload.
 
-
-def _layout_c(idx, theme, cases, scenario) -> None:
-    """Split: the case holds the left, the work steps down the right.
-
-    The right column used to be a fixed-height scrolling container that was
-    shorter than its own contents, so on the first stage the answer boxes sat
-    below a nested scrollbar and there was no way to tell they were there.
-    Nothing here scrolls inside the page any more.
+    Min: people may decide version four was the best of six, so the final
+    version is chosen explicitly rather than assumed to be the last one.
     """
     ss = st.session_state
+    section("Your versions")
+    options = _final_options(idx)
+    if not options:
+        st.caption("Write a rule first; versions appear as you test it.")
+        return
+    labels = [label for label, _ in options]
+    if ss.get(f"sb_final_{idx}") not in labels:
+        ss[f"sb_final_{idx}"] = labels[-1]
+    st.radio("Your final rule", labels, key=f"sb_final_{idx}",
+             help="The version the comparisons will test and the export keeps.")
+    picked = dict(options).get(ss.get(f"sb_final_{idx}", ""), "")
+    if picked:
+        st.markdown(f'<div class="np-card-muted" style="font-size:13px;">'
+                    f'{picked}</div>', unsafe_allow_html=True)
+    st.button("Load this version into the box", key=f"sb_loadv_{idx}",
+              type="secondary", use_container_width=True,
+              on_click=_load_version, args=(idx,))
+
+
+def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
+    """Save the MARKED final version and move on to the comparisons."""
+    ss = st.session_state
+    missing = _unanswered(idx, "b")
+    options = dict(_final_options(idx))
+    final = options.get(ss.get(f"sb_final_{idx}", ""), "").strip()
+    st.button("Save this rule and test it", key=f"sb_save_{idx}", type="primary",
+              use_container_width=True, disabled=bool(missing) or not final,
+              on_click=_save_final, args=(theme, cases, idx))
+    if missing:
+        st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
+    elif not final:
+        st.caption("Pick your final version to continue.")
+
+
+def _save_final(theme: str, cases: list[dict], idx: int) -> None:
+    """The marked version becomes the rule of record before saving."""
+    ss = st.session_state
+    label = ss.get(f"sb_final_{idx}", "")
+    rule = dict(_final_options(idx)).get(label, "").strip()
+    if rule:
+        ss[f"sb_answer_{idx}"] = rule
+        ss[f"w_sb_answer_{idx}"] = rule
+        ss[f"sb_final_label_{idx}"] = label
+    _save_theme_rule(theme, cases)
+
+
+# ---- the workspace ---------------------------------------------------------
+
+def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
+    """Split: the case holds the left, the work steps down the right."""
+    ss = st.session_state
     cur = _stage(idx)
+    draft = (ss.get(f"sb_answer_{idx}") or "").strip()
     left, right = st.columns(_C_SPLIT[cur], gap="medium")
     with left:
-        _ui_cases(cases)
+        if cur == 3:
+            _ui_versions(idx)
+        else:
+            _ui_cases(cases)
     with right:
         _render_stage_rail(idx)
         if cur == 0:
             _ui_before(idx, scenario)
+            st.caption("With this information, write your rule.")
+            _ui_rule(idx, height=150)
         elif cur == 1:
-            _ui_rule(idx, height=190)
-            _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
-                           (ss.get(f"sb_answer_{idx}") or "").strip())
-        else:
+            _ui_rule(idx, height=170, check=True)
+            with st.expander("Your reflections"):
+                answered = [r for r in _reflection_answers(idx)
+                            if r["placement"] == "before"]
+                if not answered:
+                    st.caption("Nothing written yet.")
+                for r in answered:
+                    st.markdown(f"**{r['question']}**")
+                    st.markdown(r["answer"])
+            _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
+        elif cur == 2:
             _ui_after(idx)
-            _render_version_compare(idx, scenario,
-                                    (ss.get(f"sb_answer_{idx}") or "").strip())
-            _ui_tried(idx, cases, 200)
+        else:
+            _ui_rule(idx, height=130, try_case=True)
+            _ui_tried(idx, cases, 230)
+            _render_version_compare(idx, scenario, draft)
         _render_stage_nav(idx)
         if cur == len(_STAGES) - 1:
             _ui_save(theme, cases, idx)
-
-
-def _layout_d(idx, theme, cases, scenario) -> None:
-    """Conversation-led: the chat is the page, the work docks beneath it."""
-    ss = st.session_state
-    _ui_cases(cases)
-    st.divider()
-    t_ask, t_rule, t_score, t_ver = st.tabs(
-        ["Questions", "Your rule", "Score", "Versions"])
-    with t_ask:
-        _ui_before(idx, scenario)
-        _ui_after(idx)
-    with t_rule:
-        _ui_rule(idx, height=180)
-        _ui_tried(idx, cases, 200)
-    with t_score:
-        _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx,
-                       (ss.get(f"sb_answer_{idx}") or "").strip())
-    with t_ver:
-        _render_version_compare(idx, scenario,
-                                (ss.get(f"sb_answer_{idx}") or "").strip())
-    _ui_save(theme, cases, idx)
-
-
-def _layout_o(idx, theme, cases, scenario) -> None:
-    """The layout that was live before this pass, kept so the four new ones can
-    be judged against something rather than against a description of it.
-
-    Unchanged on purpose, including the parts the new layouts improve on: it
-    scrolls, and the questions and the score compete for the same vertical space
-    as the conversation.
-    """
-    ss = st.session_state
-    draft = (ss.get(f"sb_answer_{idx}") or "").strip()
-    scores, middle, asks = st.columns([1, 1.35, 1], gap="medium")
-    with scores:
-        _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
-    with middle:
-        _ui_cases(cases)
-        st.write("")
-        _ui_rule(idx, height=170)
-        _ui_tried(idx, cases, 300)
-    with asks:
-        _ui_before(idx, scenario)
-        _ui_after(idx)
-    st.write("")
-    _render_version_compare(idx, scenario, draft)
-    st.write("")
-    _ui_save(theme, cases, idx)
-
-
-_LAYOUT_FNS = {"A": _layout_a, "B": _layout_b, "C": _layout_c, "D": _layout_d,
-               "O": _layout_o}
 
 
 def _render_theme_workspace() -> None:
@@ -1439,8 +1406,7 @@ def _render_theme_workspace() -> None:
            f"{meta['blurb']}")
     st.button("Back to the themes", key="sb_back_themes", type="secondary",
               on_click=_close_theme)
-    _render_layout_switcher()
-    _LAYOUT_FNS[_layout()](idx, theme, cases, scenario)
+    _workspace(idx, theme, cases, scenario)
 
 
 def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> None:
@@ -1495,21 +1461,13 @@ def render_themes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Round 1, inline, scoped to the theme just written
+# The theme testing loop: three rounds, per theme, against the rule just written
 # ---------------------------------------------------------------------------
-# The theme testing loop
-# ---------------------------------------------------------------------------
-# The same three rounds run twice, at two levels, because they test two
-# different claims.
-#
-#   Here, per theme, against the rule just written:
-#       does MY RULE capture what I want?
-#   In render_confirm, at the end, against the synthesized policy:
-#       does the POLICY capture it, across everything I wrote?
-#
-# What the model follows in these rounds is that one theme's rule and nothing
-# else, so a disagreement points at a gap in the rule rather than at some
-# aggregate the person never wrote.
+# The rounds test one claim: does MY RULE capture what I want? What the model
+# follows is that one theme's rule and nothing else, so a disagreement points
+# at a gap in the rule rather than at some aggregate the person never wrote.
+# There is no second loop at the end: Min cut the all-themes round, so after
+# the last theme the session goes straight to export.
 #
 # Round 2 hands the rule box back rather than offering a rewrite. The AI
 # revision was removed earlier on Min's reasoning that people accept whatever
@@ -1596,7 +1554,7 @@ def _theme_commit(cmp: dict, i: int) -> None:
     choice = ss.get(f"sb_pick_{cmp['id']}")
     if not choice:
         return
-    _record_pick(cmp, choice, i, advance=False)
+    _record_pick(cmp, choice, i)
     if cmp["round"] == 1:
         ss.sb_tcidx = ss.get("sb_tcidx", 0) + 1
     else:
@@ -1746,131 +1704,19 @@ def _render_rule_reminder(idx: int) -> None:
                 unsafe_allow_html=True)
 
 
-# ---------------------------------------------------------------------------
-# Step 5: Comparisons, in three rounds
-# ---------------------------------------------------------------------------
-# One policy is built and then sharpened across three rounds of pairwise
-# comparisons. In every round the person commits to a pick AND a reason before
-# anything the model did is revealed; seeing the model first would contaminate
-# the reason, and the whole measurement rests on that reason being their own.
-#
-#   Round 1  pick + why. The model is not involved and nothing is revealed.
-#            -> the policy is written from the rules they authored per case
-#               plus these picks and reasons.
-#   Round 2  pick + why, then reveal the model's pick and its reason, then they
-#            say what it got wrong. That critique sharpens the SAME policy.
-#   Round 3  pick + why, then reveal. Nothing is editable. This is the score.
-#
-# Round 2 revises after each item, so later items in that round are decided by
-# an already-sharpened policy. Round 3 never revises, so its policy is fixed for
-# the whole round and the agreement number means something.
-
-N_ROUND2 = 3      # sharpening items
-N_ROUND3 = 3      # scored items
 _LAST_ROUND = 3
 
 
-def _cmp_key(rnd: int) -> str:
-    return str(rnd)
 
 
-def _round_cmps(rnd: int) -> list[dict]:
-    """The comparisons for a round, generated once and cached."""
-    ss = st.session_state
-    store_ = ss.sb_cmp
-    key = _cmp_key(rnd)
-    if key in store_:
-        return store_[key]
-
-    answers = ss.sb_answers
-    used = [c.get("dimension", "") for r in store_.values() for c in r]
-    out = []
-    if rnd == 1:
-        targets = list(answers)
-    else:
-        n = N_ROUND2 if rnd == 2 else N_ROUND3
-        # Cycle back through their cases so later rounds stay on the same
-        # material, but ask for a different dimension each time so they are not
-        # answering the same question again.
-        targets = [answers[i % len(answers)] for i in range(n)] if answers else []
-
-    with st.spinner("Building the comparisons..."):
-        for k, ans in enumerate(targets):
-            data = llm.confirm_pairwise(ss.sb_agent, _does(), ss.sb_desc,
-                                        ss.sb_audience, ans,
-                                        ans.get("ideal_behavior", ""),
-                                        avoid=used, edge=(rnd > 1))
-            opts = list(data.get("options") or [])
-            while len(opts) < 2:
-                opts.append({"label": f"Option {len(opts) + 1}",
-                             "text": "(no option)"})
-            dim = (data.get("dimension") or "").strip()
-            used.append(dim)
-            out.append({
-                "id": f"r{rnd}i{k}",
-                "round": rnd, "level": "final", "theme": ans.get("theme", ""),
-                "scenario_id": ans.get("scenario_id"),
-                "title": ans.get("title", ""),
-                "situation": ans.get("situation", ""),
-                "instance": (data.get("instance") or "").strip(),
-                "user_message": (data.get("user_message") or "").strip(),
-                "dimension": dim,
-                "options": opts[:2],
-                "_mock": data.get("_mock"), "_error": data.get("_error"),
-            })
-    store_[key] = out
-    return out
 
 
-def _policy_cap() -> int:
-    return prompts.policy_cap(len(st.session_state.sb_answers))
 
-
-def _write_policy() -> None:
-    """First policy: their per-case rules plus their round-1 picks and reasons."""
-    ss = st.session_state
-    with st.spinner("Writing your policy from everything you have said..."):
-        data = llm.policy_write(ss.sb_agent, _does(), ss.sb_audience, ss.sb_rubric,
-                                ss.sb_answers, ss.sb_confirm, _policy_cap())
-    ss.sb_policy = {"principles": data.get("principles") or [],
-                    "what_changed": (data.get("what_changed") or "").strip(),
-                    "version": 1, "_mock": data.get("_mock"),
-                    "_error": data.get("_error")}
-    ss.sb_policy_log = [dict(ss.sb_policy, source="round 1")]
-    store.log_event(_rid(), "confirm", "policy_write",
-                    {"principles": ss.sb_policy["principles"],
-                     "from_answers": len(ss.sb_answers),
-                     "from_picks": len(ss.sb_confirm)})
-
-
-def _model_answer(cmp: dict) -> dict:
-    """The model's pick and reason for one comparison, cached on the item.
-
-    Computed at reveal time using whatever the policy is at that moment, so a
-    round-2 revision is reflected in the next item. The policy version used is
-    stored with it, so every model answer stays attributable after the fact.
-    """
-    ss = st.session_state
-    if "model" not in cmp:
-        pol = ss.sb_policy or {"principles": []}
-        with st.spinner("Applying your policy..."):
-            data = llm.policy_pick(ss.sb_agent, _does(), ss.sb_audience, pol,
-                                   cmp.get("instance", ""),
-                                   cmp["options"][0], cmp["options"][1])
-        cmp["model"] = {"choice": (data.get("choice") or "A").strip().upper()[:1],
-                        "reason": (data.get("reason") or "").strip(),
-                        "policy_version": pol.get("version", 1),
-                        "_mock": data.get("_mock")}
-    return cmp["model"]
-
-
-def _record_pick(cmp: dict, choice: str, i: int, advance: bool = False) -> None:
+def _record_pick(cmp: dict, choice: str, i: int) -> None:
     """Commit a pick and the reason for it.
 
-    The index is passed rather than read off ss.sb_cidx at callback time. It used
-    to be read, which was safe only because the item on screen was always
-    cmps[sb_cidx]; round 1 now runs per theme against its own counter, so the
-    assumption no longer holds.
+    The index is passed rather than read at callback time, because the item on
+    screen is not guaranteed to be the one the counter points at.
 
     Nothing here advances the screen. Round 1 used to jump straight to the next
     comparison the instant a side was clicked, which is what Min meant by "don't
@@ -1896,10 +1742,7 @@ def _record_pick(cmp: dict, choice: str, i: int, advance: bool = False) -> None:
     else:
         ss.sb_confirm.append(row)
     store.log_event(_rid(), "confirm", "confirm_pick", row)
-    if rnd > 1 and cmp.get("level") != "theme":
-        ss.sb_revealed[f"{rnd}_{i}"] = True
-    if advance:
-        ss.sb_cidx += 1
+
 
 
 def _row_for(cmp_id: str) -> dict | None:
@@ -1907,95 +1750,10 @@ def _row_for(cmp_id: str) -> dict | None:
                  if r.get("id") == cmp_id), None)
 
 
-def _apply_critique(cmp: dict, i: int) -> None:
-    """Sharpen the policy from what the person said about the model's choice."""
-    ss = st.session_state
-    rnd = cmp["round"]
-    critique = (ss.get(f"sb_crit_{rnd}_{i}") or "").strip()
-    row = _row_for(cmp["id"]) or {}
-    model = cmp.get("model") or {}
-    if critique:
-        with st.spinner("Sharpening your policy..."):
-            data = llm.policy_revise(
-                ss.sb_agent, _does(), ss.sb_audience, ss.sb_rubric,
-                ss.sb_policy, cmp.get("instance", ""),
-                cmp["options"][0], cmp["options"][1],
-                model.get("choice", ""), row.get("choice", ""), critique,
-                _policy_cap())
-        ver = (ss.sb_policy or {}).get("version", 1) + 1
-        ss.sb_policy = {"principles": data.get("principles") or [],
-                        "what_changed": (data.get("what_changed") or "").strip(),
-                        "version": ver, "_mock": data.get("_mock")}
-        ss.sb_policy_log.append(dict(ss.sb_policy, source=f"critique on {cmp['id']}"))
-        store.log_event(_rid(), "confirm", "policy_revise",
-                        {"comparison": cmp["id"], "critique": critique,
-                         "version": ver,
-                         "principles": ss.sb_policy["principles"]})
-    if row is not None:
-        row["critique"] = critique
-        row["model_choice"] = model.get("choice", "")
-        row["model_reason"] = model.get("reason", "")
-        row["agreed"] = bool(row.get("choice") == model.get("choice"))
-    ss.sb_cidx += 1
 
 
-def _next_scored(cmp: dict, i: int) -> None:
-    """Round 3: record what the model did, change nothing."""
-    ss = st.session_state
-    row = _row_for(cmp["id"])
-    model = cmp.get("model") or {}
-    if row is not None:
-        row["model_choice"] = model.get("choice", "")
-        row["model_reason"] = model.get("reason", "")
-        row["agreed"] = bool(row.get("choice") == model.get("choice"))
-        store.log_event(_rid(), "confirm", "scored_item",
-                        {"comparison": cmp["id"], "person": row.get("choice"),
-                         "model": model.get("choice"), "agreed": row["agreed"],
-                         "policy_version": model.get("policy_version")})
-    ss.sb_cidx += 1
 
 
-def _advance_round() -> None:
-    ss = st.session_state
-    if ss.sb_round == 1:
-        _write_policy()
-    ss.sb_round += 1
-    ss.sb_cidx = 0
-    store.log_event(_rid(), "confirm", "round_start", {"round": ss.sb_round})
-
-
-def _restart_confirm() -> None:
-    ss = st.session_state
-    ss.sb_cidx = 0
-    ss.sb_round = 1
-    ss.sb_confirm = []
-    ss.sb_cmp = {}
-    ss.sb_revealed = {}
-    ss.sb_policy = None
-    ss.sb_policy_log = []
-    store.log_event(_rid(), "confirm", "confirm_restart", {})
-
-
-def agreement() -> tuple[int, int]:
-    """(agreed, total) over the scored round only."""
-    rows = [r for r in st.session_state.sb_confirm
-            if r.get("round") == _LAST_ROUND and "agreed" in r]
-    return sum(1 for r in rows if r["agreed"]), len(rows)
-
-
-def _render_policy(expanded: bool = False) -> None:
-    pol = st.session_state.sb_policy or {}
-    items = pol.get("principles") or []
-    if not items:
-        return
-    body = "".join(f'<li style="margin-bottom:4px;">{p}</li>' for p in items)
-    with st.expander(f"Your policy so far ({len(items)} principles)", expanded=expanded):
-        st.markdown(f'<ol class="np-sub" style="padding-left:18px;">{body}</ol>'
-                    f'<div class="np-muted">Where this came from'
-                    f'{provenance.icon("policy")}</div>',
-                    unsafe_allow_html=True)
-        if pol.get("what_changed"):
-            st.caption(f"Last change: {pol['what_changed']}")
 
 
 def _render_options(cmp: dict, highlight: str = "", mine: str = "") -> None:
@@ -2047,17 +1805,6 @@ def _set_pick(cmp: dict, choice: str) -> None:
     st.session_state[f"sb_pick_{cmp['id']}"] = choice
 
 
-def _commit_pick(cmp: dict, i: int) -> None:
-    """Commit the pick and move the screen on.
-
-    Round 1 reveals nothing, so committing has to advance or the same
-    comparison renders again with the pick already recorded. Rounds 2 and 3
-    stay put, because the reveal and what follows it happen on this screen.
-    """
-    choice = st.session_state.get(f"sb_pick_{cmp['id']}")
-    if choice:
-        _record_pick(cmp, choice, i, advance=(cmp["round"] == 1))
-
 
 def _render_pick_controls(cmp: dict, rnd: int, i: int) -> str:
     """Which first, then why, then an explicit continue.
@@ -2080,126 +1827,6 @@ def _render_pick_controls(cmp: dict, rnd: int, i: int) -> str:
                       placeholder="what tipped it")
     return chosen
 
-
-def render_confirm() -> None:
-    ss = st.session_state
-    if ss.get("sb_submitted"):
-        st.info("Your responses have been submitted, so this step is read-only. "
-                "Continue to the last step to see and download your results.")
-        return
-    if not ss.sb_answers:
-        st.info("Write a rule for at least one case first (previous step).")
-        return
-
-    rnd = ss.sb_round
-    # These are the FINAL rounds, over the policy synthesized from every theme.
-    # The per-theme rounds in _render_theme_test tested each rule on its own;
-    # these test whether one policy built from all of them still predicts the
-    # same person. Round 1 runs here as well as per theme, and its picks feed
-    # the synthesis, so the policy is written from rules plus every pick made
-    # anywhere in the session.
-    cmps = _round_cmps(rnd)
-    if not cmps:
-        st.info("No comparisons could be built. Go back and save an answer first.")
-        return
-
-    i = ss.sb_cidx
-
-    # ---- round finished -----------------------------------------------------
-    if i >= len(cmps):
-        if rnd < _LAST_ROUND:
-            header("Comparisons",
-                   f"Round {rnd} of {_LAST_ROUND} done.")
-            if rnd == 1:
-                st.success("Next, one policy gets written from every rule you "
-                           "wrote and every choice you made. Then you will see "
-                           "how it decides on its own.")
-            else:
-                st.success("Your policy has been sharpened. The last round is "
-                           "scored: you will see what it decides, but nothing "
-                           "changes any more.")
-            _render_policy()
-            st.button(f"Start round {rnd + 1}", type="primary",
-                      on_click=_advance_round)
-            return
-        agreed, total = agreement()
-        header("Comparisons", "All three rounds are done.")
-        if total:
-            st.success(f"On the final round your policy chose the same as you on "
-                       f"**{agreed} of {total}**.")
-            st.caption("This is the scored round: the policy was frozen and "
-                       "nothing you did changed it.")
-        _render_policy(expanded=True)
-        st.button("Start over", type="secondary", on_click=_restart_confirm)
-        st.caption("Continue to see and download your results.")
-        return
-
-    cmp = cmps[i]
-    _mock_note(cmp)
-    revealed = ss.sb_revealed.get(f"{rnd}_{i}", False)
-
-    intro = {
-        1: "Pick the reply you prefer and say why. Nothing is revealed yet.",
-        2: "Pick and say why. Then you will see what your policy chose, and can "
-           "tell it what to do differently.",
-        3: "Pick and say why. Then you will see what your policy chose. This "
-           "round is scored, and nothing changes any more.",
-    }[rnd]
-    header(f"Round {rnd} of {_LAST_ROUND}",
-           f"Comparison {i + 1} of {len(cmps)}. {intro}")
-    if rnd > 1:
-        _render_policy()
-
-    # ---- the moment, as a conversation ------------------------------------
-    _render_moment(cmp)
-
-    # ---- the two candidate replies, highlighted in place once revealed -----
-    model = _model_answer(cmp) if revealed else {}
-    _render_options(cmp, highlight=model.get("choice", "") if revealed else "",
-                    mine=ss.get(f"sb_pick_{cmp['id']}", ""))
-
-    # ---- the action zone, which grows in place rather than replacing --------
-    if not revealed:
-        chosen = _render_pick_controls(cmp, rnd, i)
-        st.button("Continue", key=f"sb_cgo_{rnd}_{i}", type="primary",
-                  disabled=not chosen, on_click=_commit_pick, args=(cmp, i))
-        if not chosen:
-            st.caption("Pick one to continue.")
-        elif rnd > 1:
-            st.caption("Your policy has already decided this one. It stays hidden "
-                       "until you continue, so what you write is your own view "
-                       "rather than a reaction to it.")
-        return
-
-    row = _row_for(cmp["id"]) or {}
-    same = row.get("choice") == model.get("choice")
-    tone = "#2E7D4F" if same else "#B0472F"
-    verdict = ("You and your policy agree." if same
-               else "Your policy chose differently from you.")
-    yours = "left" if row.get("choice") == "A" else "right"
-    st.markdown(
-        f'<div class="np-card" style="margin:10px 0;border-color:{tone};">'
-        f'<div class="np-section-title" style="color:{tone};">{verdict}'
-        f'{provenance.icon("model_pick")}</div>'
-        f'<div class="np-sub"><b>You chose the {yours}.</b> '
-        f'Your policy chose because: {model.get("reason", "")}</div></div>',
-        unsafe_allow_html=True)
-
-    if rnd == 2:
-        st.text_area("What should it have done, and why?",
-                     key=f"sb_crit_{rnd}_{i}", height=90,
-                     placeholder="Say what you think of that decision and how it "
-                                 "should behave differently. Leave blank to "
-                                 "change nothing.")
-        st.button("Apply and continue", type="primary",
-                  key=f"sb_crit_go_{rnd}_{i}", on_click=_apply_critique,
-                  args=(cmp, i))
-        st.caption("Your policy is updated from what you write here, and the next "
-                   "comparison uses the updated version.")
-    else:
-        st.button("Next", type="primary", key=f"sb_next_{rnd}_{i}",
-                  on_click=_next_scored, args=(cmp, i))
-        st.caption("This round is scored. Nothing you do here changes the policy.")
 
 
 # ---------------------------------------------------------------------------
@@ -2246,7 +1873,6 @@ def render_output() -> None:
         audience=ss.sb_audience, intake_reflection=_intake_answers(),
         scenarios=ss.sb_scenarios, answers=ss.sb_answers,
         confirm=ss.sb_confirm, rubric=ss.sb_rubric,
-        policy=ss.get("sb_policy"), policy_log=ss.get("sb_policy_log"),
         submitted=bool(ss.get("sb_submitted")))
 
     header("Your preferences",
@@ -2363,7 +1989,6 @@ _RENDERERS = {
     "agent": render_agent,
     "describe": render_describe,
     "themes": render_themes,
-    "confirm": render_confirm,
     "output": render_output,
 }
 

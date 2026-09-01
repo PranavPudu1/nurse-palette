@@ -217,37 +217,6 @@ def _clean_principles(items, cap: int) -> list[str]:
     return out[:cap]
 
 
-def policy_write(agent: str, does: str, audience: str, rubric: list[dict],
-                 answers: list[dict], picks: list[dict], cap: int) -> dict:
-    """The first policy, from the per-case rules plus the round-1 picks."""
-    mock = {"principles": [
-        (a.get("ideal_behavior") or "").strip()
-        for a in answers if (a.get("ideal_behavior") or "").strip()
-    ][:cap] or ["Keep it calm and age appropriate, and tell the parent."],
-        "what_changed": "Built from the rules you wrote and your first-round choices."}
-    data = _call(prompts.policy_write_messages(agent, does, audience, rubric,
-                                               answers, picks, cap),
-                 prompts.POLICY_SCHEMA, mock)
-    data["principles"] = _clean_principles(data.get("principles"), cap)
-    return data
-
-
-def policy_revise(agent: str, does: str, audience: str, rubric: list[dict],
-                  policy: dict, instance: str, option_a: dict, option_b: dict,
-                  model_choice: str, person_choice: str, critique: str,
-                  cap: int) -> dict:
-    """Sharpen the same policy from one critique. Never a rewrite."""
-    existing = list((policy or {}).get("principles") or [])
-    extra = (critique or "").strip()
-    mock = {"principles": (existing + ([extra] if extra else []))[:cap],
-            "what_changed": "Added what you said about that decision."}
-    data = _call(prompts.policy_revise_messages(agent, does, audience, rubric,
-                                                policy, instance, option_a,
-                                                option_b, model_choice,
-                                                person_choice, critique, cap),
-                 prompts.POLICY_SCHEMA, mock)
-    data["principles"] = _clean_principles(data.get("principles"), cap)
-    return data
 
 
 def policy_pick(agent: str, does: str, audience: str, policy: dict,

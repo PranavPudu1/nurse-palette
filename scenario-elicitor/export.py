@@ -16,8 +16,6 @@ def build_artifact(*, agent: str, frame: dict, description: str, audience: str,
                    scenarios: list[dict], answers: list[dict],
                    confirm: list[dict] | None = None,
                    rubric: list[dict] | None = None,
-                   policy: dict | None = None,
-                   policy_log: list[dict] | None = None,
                    submitted: bool = False) -> dict:
     return {
         "agent": agent,
@@ -28,14 +26,6 @@ def build_artifact(*, agent: str, frame: dict, description: str, audience: str,
         "intake_reflection": intake_reflection or [],
         "submitted": submitted,
         "rubric": rubric or [],
-        # The one policy, and every version of it with what changed and why.
-        "policy": (policy or {}).get("principles", []),
-        "policy_version": (policy or {}).get("version"),
-        "policy_history": [{"version": v.get("version"),
-                            "principles": v.get("principles", []),
-                            "what_changed": v.get("what_changed", ""),
-                            "source": v.get("source", "")}
-                           for v in (policy_log or [])],
         "cases": [{"id": s["id"], "category": s.get("category", ""),
                    "title": s.get("title", ""), "situation": s.get("situation", ""),
                    "at_stake": s.get("at_stake", ""),

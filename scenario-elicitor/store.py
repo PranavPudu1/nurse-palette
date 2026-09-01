@@ -175,17 +175,17 @@ _SNAPSHOT_KEYS = {
     "resp_child_age", "sb_age_input", "sb_name_input",
     "sb_rqi",
     "sb_agent", "sb_frame", "sb_desc", "sb_audience", "sb_scenarios",
-    "sb_next_id", "sb_idx", "sb_answers", "sb_examples", "sb_cidx", "sb_confirm",
+    "sb_next_id", "sb_idx", "sb_answers", "sb_examples", "sb_confirm",
     "sb_confirm_cache", "sb_rubric", "sb_submitted",
-    "sb_round", "sb_cmp", "sb_revealed", "sb_policy", "sb_policy_log",
+    "sb_cmp", "sb_revealed",
 }
 _SNAPSHOT_PREFIXES = ("sb_answer_", "sb_first_", "sb_fb_", "sb_lastfb_",
+                      "sb_stage_", "sb_final_",
                       "sb_nrev_", "sb_cnote_",
                       "sb_chat_", "sb_pick_", "sb_vq_", "sb_vcmp_",
                       # reflective questions and the answers to them
                       "sb_rqb_", "sb_rqa_", "sb_rab_", "sb_raa_", "sb_rap_", "sb_rai_",
-                      # per-item comparison reasons and critiques
-                      "sb_crit_")
+                      )
 
 
 def save_snapshot(rid: str, state: dict) -> None:
