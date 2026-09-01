@@ -1,11 +1,13 @@
 import { ShiftType } from "@/lib/scheduler-data";
+import { useLang } from "@/lib/i18n";
 
 export function Legend() {
+  const { t } = useLang();
   const items: { type: ShiftType; label: string; cls: string }[] = [
-    { type: "D", label: "Day", cls: "bg-shift-day text-shift-day-foreground" },
-    { type: "E", label: "Evening", cls: "bg-shift-evening text-shift-evening-foreground" },
-    { type: "N", label: "Night", cls: "bg-shift-night text-shift-night-foreground" },
-    { type: "X", label: "Off", cls: "bg-shift-off text-shift-off-foreground" },
+    { type: "D", label: t("shift.D"), cls: "bg-shift-day text-shift-day-foreground" },
+    { type: "E", label: t("shift.E"), cls: "bg-shift-evening text-shift-evening-foreground" },
+    { type: "N", label: t("shift.N"), cls: "bg-shift-night text-shift-night-foreground" },
+    { type: "X", label: t("shift.X"), cls: "bg-shift-off text-shift-off-foreground" },
   ];
 
   return (

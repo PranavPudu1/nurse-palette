@@ -2,18 +2,20 @@ import { useState, useEffect } from "react";
 import { useSchedulingConstraints, useUpdateSchedulingConstraints } from "@/hooks/useSchedulingConstraints";
 import { useSoftConstraints, useAddSoftConstraint, useRemoveSoftConstraint } from "@/hooks/useSoftConstraints";
 import { Save, Trash2, Plus } from "lucide-react";
+import { useLang } from "@/lib/i18n";
 
 const RULE_FIELDS = [
-  { key: "max_shifts_per_day", label: "Max shifts per nurse per day", min: 1, max: 3 },
-  { key: "night_window_max", label: "Max night shifts in sliding window", min: 1, max: 5 },
-  { key: "night_window_k", label: "Night sliding window size (days)", min: 2, max: 7 },
-  { key: "days_off_after_night_block", label: "Days off after consecutive nights", min: 0, max: 5 },
-  { key: "max_consecutive_workdays", label: "Max consecutive workdays", min: 2, max: 7 },
-  { key: "consec_trigger", label: "Consecutive days trigger for rest", min: 2, max: 7 },
-  { key: "days_off_after_consec", label: "Days off after consecutive trigger", min: 0, max: 5 },
+  { key: "max_shifts_per_day", min: 1, max: 3 },
+  { key: "night_window_max", min: 1, max: 5 },
+  { key: "night_window_k", min: 2, max: 7 },
+  { key: "days_off_after_night_block", min: 0, max: 5 },
+  { key: "max_consecutive_workdays", min: 2, max: 7 },
+  { key: "consec_trigger", min: 2, max: 7 },
+  { key: "days_off_after_consec", min: 0, max: 5 },
 ] as const;
 
 export function SchedulingRulesPanel() {
+  const { t } = useLang();
   const { data: config, isLoading } = useSchedulingConstraints("General");
   const updateConfig = useUpdateSchedulingConstraints();
   const { data: softCons = [] } = useSoftConstraints("General");
@@ -68,21 +70,21 @@ export function SchedulingRulesPanel() {
     }, 200);
   };
 
-  if (isLoading) return <div className="py-8 text-center text-muted-foreground">Loading…</div>;
+  if (isLoading) return <div className="py-8 text-center text-muted-foreground">{t("rules.loading")}</div>;
 
   return (
     <div className="space-y-8">
       {/* Hard Constraint Rules */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Scheduling Rules</h2>
+        <h2 className="text-lg font-semibold">{t("rules.title")}</h2>
         <p className="text-sm text-muted-foreground">
-          Configure the hard constraint parameters used by the optimizer.
+          {t("rules.subtitle")}
         </p>
 
         <div className="grid gap-3 md:grid-cols-2">
           {RULE_FIELDS.map(f => (
             <div key={f.key} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-              <label className="flex-1 text-sm">{f.label}</label>
+              <label className="flex-1 text-sm">{t(`rules.${f.key}`)}</label>
               <input
                 type="number"
                 min={f.min}
@@ -100,22 +102,22 @@ export function SchedulingRulesPanel() {
             onClick={handleSaveRules}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            <Save className="w-4 h-4" /> Save Rules
+            <Save className="w-4 h-4" /> {t("rules.save")}
           </button>
         )}
       </div>
 
       {/* Level Night Penalty */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Level-Based Night Penalty</h2>
+        <h2 className="text-lg font-semibold">{t("rules.penalty.title")}</h2>
         <p className="text-sm text-muted-foreground">
-          Set penalty weights per nurse level for night shift assignments. Higher = stronger aversion.
+          {t("rules.penalty.subtitle")}
         </p>
 
         <div className="grid gap-2 md:grid-cols-5">
           {[1, 2, 3, 4, 5].map(lvl => (
             <div key={lvl} className="flex items-center gap-2 rounded-lg border border-border bg-card p-3">
-              <span className="text-sm font-medium">Level {lvl}</span>
+              <span className="text-sm font-medium">{t("rules.levelN", { n: lvl })}</span>
               <input
                 type="number"
                 min={0}
@@ -132,7 +134,7 @@ export function SchedulingRulesPanel() {
           onClick={handleSaveLevelPenalty}
           className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
-          <Save className="w-4 h-4" /> Save Level Penalties
+          <Save className="w-4 h-4" /> {t("rules.penalty.save")}
         </button>
       </div>
     </div>

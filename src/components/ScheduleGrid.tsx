@@ -5,6 +5,7 @@ import { ShiftCell } from "@/components/ShiftCell";
 import { ViolationIndicator } from "@/components/ViolationIndicator";
 import type { Violation } from "@/lib/schedule-constraints";
 import { buildViolationMap } from "@/lib/schedule-constraints";
+import { useLang, DAY_ABBR } from "@/lib/i18n";
 
 interface ScheduleGridProps {
   nurses: Nurse[];
@@ -20,8 +21,6 @@ interface ScheduleGridProps {
   onNurseNameClick?: (nurseId: string) => void;
 }
 
-const DAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
 export function ScheduleGrid({
   nurses,
   schedule,
@@ -35,6 +34,7 @@ export function ScheduleGrid({
   onAddNurse,
   onNurseNameClick,
 }: ScheduleGridProps) {
+  const { lang, t } = useLang();
   const days = getDaysInMonth(year, month);
   const [newName, setNewName] = useState("");
   const violationMap = useMemo(() => buildViolationMap(violations), [violations]);
@@ -60,7 +60,7 @@ export function ScheduleGrid({
           <thead>
             <tr>
               <th className="sticky left-0 z-20 bg-grid-header px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider min-w-[160px] border-b border-r border-grid-border">
-                Nurse
+                {t("grid.nurse")}
               </th>
               {Array.from({ length: days }, (_, i) => {
                 const d = i + 1;
@@ -75,7 +75,7 @@ export function ScheduleGrid({
                       isWeekend ? "bg-accent/60 text-accent-foreground" : "bg-grid-header text-muted-foreground"
                     } ${dayStaffingIssues.length > 0 ? "bg-amber-50" : ""}`}
                   >
-                    <div>{DAY_ABBR[dow]}</div>
+                    <div>{DAY_ABBR[lang][dow]}</div>
                     <div className="text-xs font-semibold text-foreground">{d}</div>
                     {dayStaffingIssues.length > 0 && (
                       <ViolationIndicator violations={dayStaffingIssues} />
@@ -123,7 +123,7 @@ export function ScheduleGrid({
                     <button
                       onClick={() => onRemoveNurse?.(nurse.id)}
                       className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                      aria-label={`Remove ${nurse.name}`}
+                      aria-label={t("grid.remove", { name: nurse.name })}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -142,7 +142,7 @@ export function ScheduleGrid({
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="New nurse name…"
+            placeholder={t("grid.newNurse")}
             className="px-3 py-2 text-sm rounded-md border border-input bg-card focus:outline-none focus:ring-2 focus:ring-ring/30 w-56"
           />
           <button
@@ -151,7 +151,7 @@ export function ScheduleGrid({
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Add Nurse
+            {t("grid.addNurse")}
           </button>
         </div>
       )}

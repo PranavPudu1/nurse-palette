@@ -1,5 +1,6 @@
 import { X, User, Star } from "lucide-react";
 import { NursePreferencesPanel } from "@/components/NursePreferencesPanel";
+import { useLang } from "@/lib/i18n";
 
 interface NurseInfo {
   id: string;
@@ -15,15 +16,8 @@ interface Props {
   onClose: () => void;
 }
 
-const LEVEL_LABELS: Record<number, string> = {
-  1: "Junior",
-  2: "Mid-level",
-  3: "Senior",
-  4: "Specialist",
-  5: "Lead",
-};
-
 export function NurseInfoDialog({ nurse, onClose }: Props) {
+  const { t } = useLang();
   if (!nurse) return null;
 
   return (
@@ -52,16 +46,16 @@ export function NurseInfoDialog({ nurse, onClose }: Props) {
           {/* Level */}
           <div className="flex items-center gap-2">
             <Star className="w-4 h-4 text-amber-500" />
-            <span className="text-sm font-medium">Level {nurse.level ?? 1}</span>
+            <span className="text-sm font-medium">{t("info.levelN", { n: nurse.level ?? 1 })}</span>
             <span className="text-xs text-muted-foreground">
-              ({LEVEL_LABELS[nurse.level ?? 1] ?? `Level ${nurse.level}`})
+              ({t(`info.level.${nurse.level ?? 1}`)})
             </span>
           </div>
 
           {/* Contact */}
           {(nurse.email || nurse.phone) && (
             <div className="space-y-1">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Contact</h3>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("info.contact")}</h3>
               {nurse.email && <p className="text-sm">{nurse.email}</p>}
               {nurse.phone && <p className="text-sm">{nurse.phone}</p>}
             </div>

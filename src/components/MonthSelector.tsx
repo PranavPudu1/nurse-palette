@@ -1,9 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+import { useLang, monthLabel } from "@/lib/i18n";
 
 interface MonthSelectorProps {
   year: number;
@@ -13,22 +9,23 @@ interface MonthSelectorProps {
 }
 
 export function MonthSelector({ year, month, onPrev, onNext }: MonthSelectorProps) {
+  const { lang, t } = useLang();
   return (
     <div className="flex items-center gap-3">
       <button
         onClick={onPrev}
         className="p-1.5 rounded-md hover:bg-accent transition-colors"
-        aria-label="Previous month"
+        aria-label={t("month.prev")}
       >
         <ChevronLeft className="w-5 h-5" />
       </button>
       <span className="text-lg font-semibold min-w-[180px] text-center">
-        {MONTH_NAMES[month]} {year}
+        {monthLabel(lang, year, month)}
       </span>
       <button
         onClick={onNext}
         className="p-1.5 rounded-md hover:bg-accent transition-colors"
-        aria-label="Next month"
+        aria-label={t("month.next")}
       >
         <ChevronRight className="w-5 h-5" />
       </button>

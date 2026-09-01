@@ -5,24 +5,30 @@ import { NursesPanel } from "@/components/NursesPanel";
 import { WardConfigPanel } from "@/components/WardConfigPanel";
 import { SchedulingRulesPanel } from "@/components/SchedulingRulesPanel";
 import { CalendarDays, Users, LogOut, Settings, Sliders } from "lucide-react";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useLang } from "@/lib/i18n";
 
 const Index = () => {
   const { user, signOut } = useAuth();
+  const { t } = useLang();
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card px-6 py-4">
         <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Nurse Scheduler</h1>
+            <h1 className="text-xl font-bold tracking-tight">{t("app.title")}</h1>
             <p className="text-sm text-muted-foreground">{user?.email}</p>
           </div>
-          <button
-            onClick={signOut}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
-          >
-            <LogOut className="w-4 h-4" /> Sign Out
-          </button>
+          <div className="flex items-center gap-3">
+            <LanguageToggle />
+            <button
+              onClick={signOut}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> {t("app.signOut")}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -30,16 +36,16 @@ const Index = () => {
         <Tabs defaultValue="schedule" className="space-y-6">
           <TabsList>
             <TabsTrigger value="schedule" className="gap-1.5">
-              <CalendarDays className="w-4 h-4" /> Schedule
+              <CalendarDays className="w-4 h-4" /> {t("tab.schedule")}
             </TabsTrigger>
             <TabsTrigger value="nurses" className="gap-1.5">
-              <Users className="w-4 h-4" /> Nurses
+              <Users className="w-4 h-4" /> {t("tab.nurses")}
             </TabsTrigger>
             <TabsTrigger value="ward-config" className="gap-1.5">
-              <Settings className="w-4 h-4" /> Ward Config
+              <Settings className="w-4 h-4" /> {t("tab.wardConfig")}
             </TabsTrigger>
             <TabsTrigger value="rules" className="gap-1.5">
-              <Sliders className="w-4 h-4" /> Scheduling Rules
+              <Sliders className="w-4 h-4" /> {t("tab.rules")}
             </TabsTrigger>
           </TabsList>
 

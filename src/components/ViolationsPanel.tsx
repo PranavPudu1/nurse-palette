@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { AlertTriangle, ChevronRight, ChevronDown, XCircle, AlertCircle } from "lucide-react";
+import { AlertTriangle, ChevronRight, ChevronDown, AlertCircle } from "lucide-react";
 import type { Violation } from "@/lib/schedule-constraints";
+import { ViolationLegend } from "./ViolationLegend";
+import { useLang } from "@/lib/i18n";
 
 interface Props {
   violations: Violation[];
@@ -8,6 +10,7 @@ interface Props {
 }
 
 export function ViolationsPanel({ violations, nurseNames }: Props) {
+  const { t } = useLang();
   const [expanded, setExpanded] = useState(true);
   const [filter, setFilter] = useState<"all" | "error" | "warning">("all");
 
@@ -26,20 +29,23 @@ export function ViolationsPanel({ violations, nurseNames }: Props) {
         {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         <AlertTriangle className="w-4 h-4 text-amber-600" />
         <span>
-          Schedule Issues
+          {t("viol.title")}
         </span>
         <span className="ml-auto flex items-center gap-2 text-xs font-normal">
           {errors.length > 0 && (
-            <span className="text-destructive font-medium">{errors.length} errors</span>
+            <span className="text-destructive font-medium">{t("cmp.nErrorsHard", { n: errors.length })}</span>
           )}
           {warnings.length > 0 && (
-            <span className="text-amber-600 font-medium">{warnings.length} warnings</span>
+            <span className="text-amber-600 font-medium">{t("cmp.nWarningsSoft", { n: warnings.length })}</span>
           )}
         </span>
       </button>
 
       {expanded && (
         <div>
+          <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+            <ViolationLegend />
+          </div>
           <div className="flex gap-1 px-3 py-2 border-b border-border bg-muted/30">
             {(["all", "error", "warning"] as const).map((f) => (
               <button
@@ -51,7 +57,7 @@ export function ViolationsPanel({ violations, nurseNames }: Props) {
                     : "text-muted-foreground hover:bg-accent"
                 }`}
               >
-                {f === "all" ? `All (${violations.length})` : f === "error" ? `Errors (${errors.length})` : `Warnings (${warnings.length})`}
+                {f === "all" ? t("viol.all", { n: violations.length }) : f === "error" ? t("viol.errorsHard", { n: errors.length }) : t("viol.warningsSoft", { n: warnings.length })}
               </button>
             ))}
           </div>
@@ -59,19 +65,19 @@ export function ViolationsPanel({ violations, nurseNames }: Props) {
           <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
             {filtered.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No {filter === "all" ? "issues" : filter + "s"} found
+                {filter === "all" ? t("viol.noneIssues") : filter === "error" ? t("viol.noneErrors") : t("viol.noneWarnings")}
               </div>
             ) : (
               filtered.map((v, i) => (
                 <div key={i} className="flex items-start gap-2.5 px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors">
                   {v.severity === "error" ? (
-                    <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                   ) : (
-                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                   )}
                   <div className="min-w-0">
                     <div className="font-medium text-foreground">
-                      {v.nurseId === "__staffing__" ? "Staffing Gap" : (nurseNames[v.nurseId] || v.nurseId.slice(0, 8))}
+                      {v.nurseId === "__staffing__" ? t("viol.staffingGap") : (nurseNames[v.nurseId] || v.nurseId.slice(0, 8))}
                     </div>
                     <div className="text-muted-foreground text-xs mt-0.5">
                       {v.message}

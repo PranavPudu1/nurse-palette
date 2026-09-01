@@ -9,11 +9,14 @@ import { Legend } from "@/components/Legend";
 import { NursePreferencesPanel } from "@/components/NursePreferencesPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CalendarDays, Users, LogOut, Settings2 } from "lucide-react";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useLang } from "@/lib/i18n";
 
 const now = new Date();
 
 const NurseView = () => {
   const { user, signOut } = useAuth();
+  const { t } = useLang();
   const { data: nurses = [] } = useNurses();
   const { data: departmentNurses = [] } = useDepartmentNurses();
 
@@ -47,17 +50,20 @@ const NurseView = () => {
       <header className="border-b border-border bg-card px-6 py-4">
         <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Nurse Scheduler</h1>
+            <h1 className="text-xl font-bold tracking-tight">{t("app.title")}</h1>
             <p className="text-sm text-muted-foreground">
-              {myNurse?.name ?? user?.email} · {myNurse?.department ?? "Nurse"}
+              {myNurse?.name ?? user?.email} · {myNurse?.department ?? t("nv.nurse")}
             </p>
           </div>
-          <button
-            onClick={signOut}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
-          >
-            <LogOut className="w-4 h-4" /> Sign Out
-          </button>
+          <div className="flex items-center gap-3">
+            <LanguageToggle />
+            <button
+              onClick={signOut}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> {t("app.signOut")}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -65,13 +71,13 @@ const NurseView = () => {
         <Tabs defaultValue="my-schedule" className="space-y-6">
           <TabsList>
             <TabsTrigger value="my-schedule" className="gap-1.5">
-              <CalendarDays className="w-4 h-4" /> My Schedule
+              <CalendarDays className="w-4 h-4" /> {t("tab.mySchedule")}
             </TabsTrigger>
             <TabsTrigger value="team" className="gap-1.5">
-              <Users className="w-4 h-4" /> Team Schedule
+              <Users className="w-4 h-4" /> {t("tab.team")}
             </TabsTrigger>
             <TabsTrigger value="preferences" className="gap-1.5">
-              <Settings2 className="w-4 h-4" /> Preferences
+              <Settings2 className="w-4 h-4" /> {t("tab.preferences")}
             </TabsTrigger>
           </TabsList>
 
@@ -82,9 +88,9 @@ const NurseView = () => {
                 <Legend />
               </div>
               {isLoading ? (
-                <div className="py-12 text-center text-muted-foreground">Loading schedule…</div>
+                <div className="py-12 text-center text-muted-foreground">{t("sched.loading")}</div>
               ) : !myNurse ? (
-                <div className="py-12 text-center text-muted-foreground">No schedule assigned yet.</div>
+                <div className="py-12 text-center text-muted-foreground">{t("nv.noSchedule")}</div>
               ) : (
                 <ScheduleGrid
                   nurses={myGridNurses}
@@ -104,9 +110,9 @@ const NurseView = () => {
                 <Legend />
               </div>
               {isLoading ? (
-                <div className="py-12 text-center text-muted-foreground">Loading schedule…</div>
+                <div className="py-12 text-center text-muted-foreground">{t("sched.loading")}</div>
               ) : allGridNurses.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground">No team members yet.</div>
+                <div className="py-12 text-center text-muted-foreground">{t("nv.noTeam")}</div>
               ) : (
                 <ScheduleGrid
                   nurses={allGridNurses}
@@ -123,7 +129,7 @@ const NurseView = () => {
             {myNurse ? (
               <NursePreferencesPanel nurseId={myNurse.id} />
             ) : (
-              <div className="py-12 text-center text-muted-foreground">No nurse profile found.</div>
+              <div className="py-12 text-center text-muted-foreground">{t("nv.noProfile")}</div>
             )}
           </TabsContent>
         </Tabs>

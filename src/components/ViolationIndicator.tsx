@@ -1,12 +1,14 @@
 import type { Violation } from "@/lib/schedule-constraints";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, AlertCircle } from "lucide-react";
+import { useLang } from "@/lib/i18n";
 
 interface Props {
   violations: Violation[];
 }
 
 export function ViolationIndicator({ violations }: Props) {
+  const { t } = useLang();
   if (violations.length === 0) return null;
 
   const hasError = violations.some((v) => v.severity === "error");
@@ -26,6 +28,9 @@ export function ViolationIndicator({ violations }: Props) {
         <ul className="text-xs space-y-0.5">
           {violations.map((v, i) => (
             <li key={i} className={v.severity === "error" ? "text-destructive" : "text-amber-600"}>
+              <span className="font-medium">
+                {v.severity === "error" ? t("viol.errorPrefix") : t("viol.warningPrefix")}
+              </span>
               {v.message}
             </li>
           ))}

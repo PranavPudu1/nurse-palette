@@ -16,10 +16,12 @@ import { NurseInfoDialog } from "@/components/NurseInfoDialog";
 import { Download, Wand2, Loader2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useLang } from "@/lib/i18n";
 
 const now = new Date();
 
 export function ScheduleTab() {
+  const { t } = useLang();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [generating, setGenerating] = useState(false);
@@ -134,8 +136,12 @@ export function ScheduleTab() {
     const totalDemand = wardConfigs.reduce((sum, c) => sum + c.required_nurses, 0);
     if (acceptedNurses.length < totalDemand) {
       toast({
-        title: "Not enough nurses",
-        description: `You have ${acceptedNurses.length} accepted nurse(s) but your ward config requires ${totalDemand} per day (${wardConfigs.map((c) => `${c.shift_type}: ${c.required_nurses}`).join(", ")}). Accept more nurse invites or lower the ward requirements.`,
+        title: t("toast.notEnough.title"),
+        description: t("toast.notEnough.desc", {
+          have: acceptedNurses.length,
+          need: totalDemand,
+          detail: wardConfigs.map((c) => `${c.shift_type}: ${c.required_nurses}`).join(", "),
+        }),
         variant: "destructive",
       });
       return;
@@ -152,12 +158,12 @@ export function ScheduleTab() {
         const errMsg: string = data.error;
         if (errMsg.includes("No feasible schedule")) {
           toast({
-            title: "No feasible schedule",
-            description: "The optimizer couldn't satisfy all constraints. Try: reducing required nurses per shift, accepting more nurse invites, or removing some unavailability entries.",
+            title: t("toast.infeasible.title"),
+            description: t("toast.infeasible.desc"),
             variant: "destructive",
           });
         } else {
-          toast({ title: "Generation failed", description: errMsg, variant: "destructive" });
+          toast({ title: t("toast.genFailed"), description: errMsg, variant: "destructive" });
         }
         return;
       }
@@ -166,18 +172,18 @@ export function ScheduleTab() {
       const msg = err?.message ?? String(err);
       if (msg.includes("No feasible schedule") || msg.includes("422")) {
         toast({
-          title: "No feasible schedule",
-          description: "The optimizer couldn't satisfy all constraints. Try: reducing required nurses per shift, accepting more nurse invites, or removing some unavailability entries.",
+          title: t("toast.infeasible.title"),
+          description: t("toast.infeasible.desc"),
           variant: "destructive",
         });
       } else if (msg.includes("SCHEDULER_API_URL")) {
         toast({
-          title: "Scheduler not configured",
-          description: "The schedule optimizer service URL hasn't been set up yet. Contact your administrator.",
+          title: t("toast.notConfigured.title"),
+          description: t("toast.notConfigured.desc"),
           variant: "destructive",
         });
       } else {
-        toast({ title: "Generation failed", description: msg, variant: "destructive" });
+        toast({ title: t("toast.genFailed"), description: msg, variant: "destructive" });
       }
     } finally {
       setGenerating(false);
@@ -197,9 +203,9 @@ export function ScheduleTab() {
       .upsert(rows, { onConflict: "nurse_id,date" });
 
     if (error) {
-      toast({ title: "Apply failed", description: error.message, variant: "destructive" });
+      toast({ title: t("toast.applyFailed"), description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Schedule applied", description: "The generated schedule has been saved." });
+      toast({ title: t("toast.applied.title"), description: t("toast.applied.desc") });
       setGeneratedOptions(null);
       window.location.reload();
     }
@@ -231,14 +237,14 @@ export function ScheduleTab() {
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
           >
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {generating ? "Generating…" : "Auto-Generate"}
+            {generating ? t("sched.generating") : t("sched.generate")}
           </button>
           <button
             onClick={handleExport}
             disabled={nurses.length === 0}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-accent disabled:opacity-40 transition-colors"
           >
-            <Download className="w-4 h-4" /> Export CSV
+            <Download className="w-4 h-4" /> {t("sched.exportCsv")}
           </button>
           <Legend />
         </div>
@@ -248,17 +254,17 @@ export function ScheduleTab() {
         <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-sm">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
           <span className="text-amber-800">
-            {errorCount > 0 && <span className="font-semibold text-destructive">{errorCount} errors</span>}
+            {errorCount > 0 && <span className="font-semibold text-destructive">{t("sched.nErrors", { n: errorCount })}</span>}
             {errorCount > 0 && warnCount > 0 && " · "}
-            {warnCount > 0 && <span className="font-semibold text-amber-600">{warnCount} warnings</span>}
+            {warnCount > 0 && <span className="font-semibold text-amber-600">{t("sched.nWarnings", { n: warnCount })}</span>}
           </span>
         </div>
       )}
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading schedule…</div>
+        <div className="py-12 text-center text-muted-foreground">{t("sched.loading")}</div>
       ) : nurses.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">Add nurses in the Nurses tab first.</div>
+        <div className="py-12 text-center text-muted-foreground">{t("sched.addFirst")}</div>
       ) : (
         <>
           <ScheduleGrid

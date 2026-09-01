@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { LanguageProvider, useLang } from "@/lib/i18n";
 import { useUserRole } from "@/hooks/useUserRole";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -15,16 +16,18 @@ const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
+  const { t } = useLang();
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">{t("app.loading")}</div>;
   if (!user) return <Navigate to="/auth" replace />;
   return <>{children}</>;
 }
 
 function RoleRouter() {
   const { data: roleData, isLoading } = useUserRole();
+  const { t } = useLang();
 
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">{t("app.loading")}</div>;
   }
 
   const role = roleData?.role ?? "unknown";
@@ -37,7 +40,7 @@ function RoleRouter() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="text-center space-y-3">
-        <p className="text-muted-foreground">No role assigned. Ask a manager to invite you.</p>
+        <p className="text-muted-foreground">{t("app.noRole")}</p>
         <SignOutButton />
       </div>
     </div>
@@ -46,15 +49,17 @@ function RoleRouter() {
 
 function SignOutButton() {
   const { signOut } = useAuth();
+  const { t } = useLang();
   return (
     <button onClick={signOut} className="text-sm text-primary hover:underline">
-      Sign Out
+      {t("app.signOut")}
     </button>
   );
 }
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <LanguageProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -68,6 +73,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
+    </LanguageProvider>
   </QueryClientProvider>
 );
 
