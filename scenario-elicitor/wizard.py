@@ -190,8 +190,46 @@ def _stepper() -> None:
     st.markdown(_stepper_html(steps(), cur_index()), unsafe_allow_html=True)
 
 
-def _advance(delta: int) -> None:
+def _blocked_msg(key: str) -> str:
+    """Why Continue did not advance, in words the person can act on."""
+    import steps as step_bodies
     ss = st.session_state
+    if key == "agent":
+        return "Describe the agent to continue."
+    if key == "describe":
+        slots = step_bodies._intake_slots()
+        missing = [k for k, _ in slots if not step_bodies._answered(k)]
+        return (step_bodies._needs(len(missing), len(slots))
+                or "Answer the questions to continue.")
+    if key == "themes":
+        if ss.get("sb_theme"):
+            return ("Finish this topic first, or use its own buttons to go "
+                    "back to the topic list.")
+        n = len(ss.get("sb_themes_done") or [])
+        return (f"Work through {N_THEMES} topics to continue "
+                f"({n} of {N_THEMES} done so far).")
+    return "Finish this step to continue."
+
+
+def _advance(delta: int) -> None:
+    """Move between steps, gating at click time.
+
+    Continue used to render disabled until can_advance() passed, which reads
+    state that only refreshes when a text box loses focus. On phones a tap on
+    a disabled button fires no event at all, so the text never committed and
+    the button never enabled. Continue is now always tappable: the tap itself
+    commits the widget values, and this callback either advances or says what
+    is still missing.
+    """
+    ss = st.session_state
+    import steps as step_bodies
+    step_bodies.sync_widget_mirrors()
+    if delta > 0:
+        key = conditions.steps_for()[cur_index()]["key"]
+        if not can_advance(key):
+            ss["_flash_nav"] = _blocked_msg(key)
+            return
+    ss.pop("_flash_nav", None)
     _set_index(cur_index() + delta)
     rid = ss.get("resp_id")
     if rid:
@@ -202,7 +240,6 @@ def _advance(delta: int) -> None:
 def _nav() -> None:
     seq = steps()
     cur = cur_index()
-    key = seq[cur]["key"]
     c1, _, c3 = st.columns([1.3, 4, 1.3])
     with c1:
         if cur > 0:
@@ -211,7 +248,10 @@ def _nav() -> None:
     with c3:
         if cur < len(seq) - 1:
             st.button("Continue", use_container_width=True, key="sb_nav_cont",
-                      disabled=not can_advance(key), on_click=_advance, args=(1,))
+                      on_click=_advance, args=(1,))
+    msg = st.session_state.pop("_flash_nav", None)
+    if msg:
+        st.warning(msg)
 
 
 def render() -> None:

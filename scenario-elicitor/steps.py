@@ -610,8 +610,43 @@ def _kept_text(canonical: str, label: str, **kw) -> str:
     return val
 
 
+def _live(key: str) -> str:
+    """The freshest text for a mirrored box.
+
+    Widget state (the w_ key) updates the moment a button is tapped, but the
+    canonical key only catches up when the box next renders. Validation that
+    runs inside a click callback must therefore read the widget key first, or
+    it judges the text as it was one interaction ago. On phones that was a
+    dead end: gating buttons were disabled on stale-empty state, and a disabled
+    button cannot receive the tap that would refresh it.
+    """
+    ss = st.session_state
+    v = ss.get(f"w_{key}")
+    return str(v) if v is not None else str(ss.get(key) or "")
+
+
 def _answered(key: str) -> bool:
-    return len((st.session_state.get(key) or "").strip()) >= MIN_ANSWER
+    return len(_live(key).strip()) >= MIN_ANSWER
+
+
+def _show_flash(key: str) -> None:
+    """Show and clear a one-shot validation message set by a click handler."""
+    msg = st.session_state.pop(key, None)
+    if msg:
+        st.warning(msg)
+
+
+def sync_widget_mirrors() -> None:
+    """Copy every mounted mirrored widget's value back to its canonical key.
+
+    Called from navigation callbacks: without it, text typed right before
+    tapping Back or Continue is dropped, because the mirror normally happens
+    only when the box renders again, and navigation unmounts it first.
+    """
+    ss = st.session_state
+    for k in list(ss.keys()):
+        if isinstance(k, str) and k.startswith("w_sb_") and isinstance(ss[k], str):
+            ss[k[2:]] = ss[k]
 
 
 def _render_one_question(key: str, label: str, text: str, info_key: str) -> None:
@@ -1109,7 +1144,27 @@ def _ui_rule(idx: int, height: int = 200) -> None:
 
 
 def _save_version_click(idx: int) -> None:
+    ss = st.session_state
+    draft = _live(f"sb_answer_{idx}").strip()
+    if not draft:
+        ss[f"_flash_vers_{idx}"] = "Write the rule first, then save it as a version."
+        return
+    if draft == _vrule(idx, ss.get(f"sb_vsel_{idx}", ORIGINAL)).strip():
+        ss[f"_flash_vers_{idx}"] = ("No changes since the selected version, so "
+                                    "there is nothing new to save.")
+        return
+    ss[f"sb_answer_{idx}"] = draft
     _save_version(idx)
+
+
+def _check_click(idx: int) -> None:
+    ss = st.session_state
+    draft = _live(f"sb_answer_{idx}").strip()
+    if not draft:
+        ss[f"_flash_vers_{idx}"] = "Write your rule first, then check it."
+        return
+    ss[f"sb_answer_{idx}"] = draft
+    _flag("_sb_check")
 
 
 def _ui_rule_versioned(idx: int, height: int = 170, check: bool = False) -> None:
@@ -1140,18 +1195,16 @@ def _ui_rule_versioned(idx: int, height: int = 170, check: bool = False) -> None
         f"sb_answer_{idx}", "Your rule", height=height,
         label_visibility="collapsed",
         placeholder="Edit the rule here, then save it as a new version.").strip()
-    sel = ss.get(f"sb_vsel_{idx}", ORIGINAL)
-    unchanged = draft == _vrule(idx, sel).strip()
     b1, b2 = st.columns(2, gap="small")
     b1.button("Save as new version", key=f"sb_savev_{idx}",
               use_container_width=True, type="secondary",
-              disabled=(not draft) or unchanged,
               help="Keeps the selected version and adds this text as the next one.",
               on_click=_save_version_click, args=(idx,))
     if check:
         b2.button("Check my answer", key=f"sb_check_{idx}",
-                  use_container_width=True, type="primary", disabled=not draft,
-                  on_click=_flag, args=("_sb_check",))
+                  use_container_width=True, type="primary",
+                  on_click=_check_click, args=(idx,))
+    _show_flash(f"_flash_vers_{idx}")
 
 
 # ---- stages ----------------------------------------------------------------
@@ -1181,6 +1234,28 @@ def _leave_consider(idx: int) -> None:
     _set_stage(idx, 1)
 
 
+def _try_next(idx: int, cur: int) -> None:
+    """Advance a stage, gating at click time rather than by disabling the
+    button. A disabled button never receives the tap that would commit the
+    just-typed text (the mobile dead end), so Next is always tappable and
+    explains what is missing instead."""
+    ss = st.session_state
+    sync_widget_mirrors()
+    if cur == 0:
+        missing = _unanswered(idx, "b")
+        if missing:
+            ss[f"_flash_stage_{idx}"] = _needs(len(missing),
+                                               len(_question_slots(idx, "b")))
+            return
+        if not _live(f"sb_answer_{idx}").strip():
+            ss[f"_flash_stage_{idx}"] = ("With this information, write your "
+                                         "rule to continue.")
+            return
+        _leave_consider(idx)
+    else:
+        _set_stage(idx, cur + 1)
+
+
 def _render_stage_rail(idx: int) -> None:
     cur = _stage(idx)
     cells = "".join(
@@ -1204,16 +1279,14 @@ def _render_stage_nav(idx: int) -> None:
         c1.button("Back", key=f"sb_stback_{idx}_{cur}", use_container_width=True,
                   type="secondary", on_click=_set_stage, args=(idx, cur - 1))
     if cur < len(_STAGES) - 1:
-        on_click = _leave_consider if cur == 0 else _set_stage
-        args = (idx,) if cur == 0 else (idx, cur + 1)
         c2.button(f"Next: {_STAGES[cur + 1]}", key=f"sb_stnext_{idx}_{cur}",
                   use_container_width=True, type="primary",
-                  disabled=bool(missing) or no_rule,
-                  on_click=on_click, args=args)
+                  on_click=_try_next, args=(idx, cur))
     if missing:
         st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
     elif no_rule:
         st.caption("With this information, write your rule to continue.")
+    _show_flash(f"_flash_stage_{idx}")
 
 
 # ---- the Test stage: versions and the final pick ---------------------------
@@ -1268,23 +1341,32 @@ def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
     missing = _unanswered(idx, "b")
     final = _vrule(idx, ss.get(f"sb_final_{idx}", "")).strip()
     st.button("Save this rule and test it", key=f"sb_save_{idx}", type="primary",
-              use_container_width=True, disabled=bool(missing) or not final,
+              use_container_width=True,
               on_click=_save_final, args=(theme, cases, idx))
     if missing:
         st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
     elif not final:
         st.caption("Pick your final version to continue.")
+    _show_flash(f"_flash_save_{idx}")
 
 
 def _save_final(theme: str, cases: list[dict], idx: int) -> None:
     """The marked version becomes the rule of record before saving."""
     ss = st.session_state
+    sync_widget_mirrors()
+    missing = _unanswered(idx, "b")
+    if missing:
+        ss[f"_flash_save_{idx}"] = _needs(len(missing),
+                                          len(_question_slots(idx, "b")))
+        return
     label = ss.get(f"sb_final_{idx}", "")
     rule = _vrule(idx, label).strip()
-    if rule:
-        ss[f"sb_answer_{idx}"] = rule
-        ss[f"w_sb_answer_{idx}"] = rule
-        ss[f"sb_final_label_{idx}"] = label
+    if not rule:
+        ss[f"_flash_save_{idx}"] = "Pick your final version to continue."
+        return
+    ss[f"sb_answer_{idx}"] = rule
+    ss[f"w_sb_answer_{idx}"] = rule
+    ss[f"sb_final_label_{idx}"] = label
     _save_theme_rule(theme, cases)
 
 
@@ -1535,9 +1617,10 @@ def _theme_after_reveal(cmp: dict, i: int) -> None:
     theme = cmp.get("theme", "")
     if theme:
         idx = _theme_index(theme)
-        live = (ss.get(f"sb_answer_{idx}") or "").strip()
+        live = _live(f"sb_answer_{idx}").strip()
         stored = (_theme_answer(theme) or {}).get("ideal_behavior", "")
         if live and live != stored:
+            ss[f"sb_answer_{idx}"] = live
             _save_version(idx, live)   # the edit becomes a version too
             cases = _theme_cases(theme)
             _record_answer(cases[0] if cases else {"id": -1, "title": theme,

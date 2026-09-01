@@ -26,14 +26,16 @@ click(at, "Continue")
 at.selectbox(key="sb_age_input").set_value("9-12").run()
 _intake = [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]
 assert _intake, "no intake questions were asked"
-_cont = [b for b in at.button if b.label == "Continue"][0]
-assert _cont.disabled, "Continue was open with the intake questions unanswered"
+# Continue is always tappable now; the gate holds by refusing to advance.
+click(at, "Continue")
+assert at.session_state["sb_step_key"] == "describe", \
+    "advanced with the intake questions unanswered"
 for _w in _intake:
     at.text_area(key=_w.key).set_value("I want her told, gently.").run()
-_cont = [b for b in at.button if b.label == "Continue"][0]
-assert not _cont.disabled, "Continue still blocked after answering"
 print(f"intake: {len(_intake)} questions, gate holds")
 click(at, "Continue")
+assert at.session_state["sb_step_key"] != "describe", \
+    "Continue still blocked after answering"
 ss = at.session_state
 DRAFT = "Summarize it calmly for my 10-year-old and never repeat graphic detail."
 ANS = "She is only ten and gets frightened easily."
@@ -66,13 +68,13 @@ for n in range(wizard.N_THEMES):
     theme, idx = ss["sb_theme"], ss["sb_idx"]
     # stage 0 gates on questions AND a first draft
     nxt = [b for b in at.button if b.label.startswith("Next:")][0]
-    assert nxt.disabled, "Next was open with questions unanswered"
+    nxt.click().run()
+    assert (f"sb_stage_{idx}" not in ss) or ss[f"sb_stage_{idx}"] == 0, \
+        "Next advanced with questions unanswered"
     filled = answer_all(idx, "b")
     assert filled, "no question boxes on screen"
     at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
     to_stage(at, 3)   # -> score, -> sharpen, -> test
-    save = [b for b in at.button if b.label == "Save this rule and test it"][0]
-    assert not save.disabled, "save blocked despite a marked final version"
     assert click(at, "Save this rule and test it"), "save blocked"
     assert not at.exception, at.exception
     assert ss["sb_tphase"] == "test" and ss["sb_tround"] == 1

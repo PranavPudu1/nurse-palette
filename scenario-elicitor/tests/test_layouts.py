@@ -31,11 +31,18 @@ def click(at, label):
 
 
 def next_stage(at):
+    """Click Next and report whether the stage actually advanced. The button
+    is always tappable now (gating happens in the click handler), so blocked
+    means the click left the stage where it was."""
+    ss = at.session_state
+    idx = ss["sb_idx"] if "sb_idx" in ss else 0
+    skey = f"sb_stage_{idx}"
+    before = ss[skey] if skey in ss else 0
     for b in at.button:
         if b.label.startswith("Next:"):
-            if b.disabled:
-                return "blocked"
-            b.click().run(); return "moved"
+            b.click().run()
+            after = at.session_state[skey] if skey in at.session_state else 0
+            return "moved" if after > before else "blocked"
     return "none"
 
 
