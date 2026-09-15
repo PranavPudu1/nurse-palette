@@ -4,7 +4,8 @@ import { ScheduleTab } from "@/components/ScheduleTab";
 import { NursesPanel } from "@/components/NursesPanel";
 import { WardConfigPanel } from "@/components/WardConfigPanel";
 import { SchedulingRulesPanel } from "@/components/SchedulingRulesPanel";
-import { CalendarDays, Users, LogOut, Settings, Sliders } from "lucide-react";
+import { RequestsPanel } from "@/components/RequestsPanel";
+import { CalendarDays, Users, LogOut, Settings, Sliders, Inbox } from "lucide-react";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useLang } from "@/lib/i18n";
 
@@ -41,6 +42,9 @@ const Index = () => {
             <TabsTrigger value="nurses" className="gap-1.5">
               <Users className="w-4 h-4" /> {t("tab.nurses")}
             </TabsTrigger>
+            <TabsTrigger value="requests" className="gap-1.5">
+              <Inbox className="w-4 h-4" /> {t("tab.requests")}
+            </TabsTrigger>
             <TabsTrigger value="ward-config" className="gap-1.5">
               <Settings className="w-4 h-4" /> {t("tab.wardConfig")}
             </TabsTrigger>
@@ -54,6 +58,9 @@ const Index = () => {
           </TabsContent>
           <TabsContent value="nurses">
             <NursesPanel />
+          </TabsContent>
+          <TabsContent value="requests">
+            <RequestsPanel />
           </TabsContent>
           <TabsContent value="ward-config">
             <WardConfigPanel />

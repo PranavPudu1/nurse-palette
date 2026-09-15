@@ -62,7 +62,7 @@ export function NurseInfoDialog({ nurse, onClose }: Props) {
           )}
 
           {/* Editable Preferences, Unavailability & Soft Constraints */}
-          <NursePreferencesPanel nurseId={nurse.id} />
+          <NursePreferencesPanel nurseId={nurse.id} manager />
         </div>
       </div>
     </div>

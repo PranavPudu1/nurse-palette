@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNurses } from "@/hooks/useNurses";
 import { useSchedules, useUpsertShift } from "@/hooks/useSchedules";
 import { useWardConfig } from "@/hooks/useWardConfig";
@@ -13,7 +14,7 @@ import { MonthSelector } from "@/components/MonthSelector";
 import { Legend } from "@/components/Legend";
 import { ViolationsPanel } from "@/components/ViolationsPanel";
 import { NurseInfoDialog } from "@/components/NurseInfoDialog";
-import { Download, Wand2, Loader2, AlertTriangle } from "lucide-react";
+import { Download, Wand2, Loader2, AlertTriangle, History } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useLang } from "@/lib/i18n";
@@ -22,6 +23,7 @@ const now = new Date();
 
 export function ScheduleTab() {
   const { t } = useLang();
+  const qc = useQueryClient();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [generating, setGenerating] = useState(false);
@@ -36,6 +38,23 @@ export function ScheduleTab() {
   const upsertShift = useUpsertShift();
   const { data: wardConfigs = [] } = useWardConfig();
   const { data: exclusions = [] } = useExclusions();
+
+  // Every generation run is saved, so options survive tab switches and Apply
+  // ("the generated schedules are gone... can we just save it?" - Sep 16).
+  const { data: pastGens = [] } = useQuery({
+    queryKey: ["schedule_generations", year, month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("schedule_generations")
+        .select("id, created_at, options")
+        .eq("year", year)
+        .eq("month", month)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   // Clear local overrides when server data updates (meaning server caught up)
   const prevServerRef = useRef(serverSchedule);
@@ -168,6 +187,10 @@ export function ScheduleTab() {
         return;
       }
       setGeneratedOptions(data.options);
+      const { error: saveErr } = await supabase
+        .from("schedule_generations")
+        .insert({ year, month, options: data.options });
+      if (!saveErr) qc.invalidateQueries({ queryKey: ["schedule_generations", year, month] });
     } catch (err: any) {
       const msg = err?.message ?? String(err);
       if (msg.includes("No feasible schedule") || msg.includes("422")) {
@@ -207,7 +230,7 @@ export function ScheduleTab() {
     } else {
       toast({ title: t("toast.applied.title"), description: t("toast.applied.desc") });
       setGeneratedOptions(null);
-      window.location.reload();
+      qc.invalidateQueries({ queryKey: ["schedules"] });
     }
   };
 
@@ -249,6 +272,31 @@ export function ScheduleTab() {
           <Legend />
         </div>
       </div>
+
+      {pastGens.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <History className="w-4 h-4" />
+          <span>{t("sched.pastGens")}:</span>
+          <select
+            value=""
+            onChange={(e) => {
+              const g = pastGens.find((x: any) => x.id === e.target.value);
+              if (g) setGeneratedOptions(g.options as any[]);
+            }}
+            className="px-2 py-1.5 text-sm rounded-md border border-input bg-card focus:outline-none focus:ring-2 focus:ring-ring/30"
+          >
+            <option value="">…</option>
+            {pastGens.map((g: any) => (
+              <option key={g.id} value={g.id}>
+                {t("sched.pastGenOption", {
+                  time: new Date(g.created_at).toLocaleString(),
+                  n: Array.isArray(g.options) ? g.options.length : 0,
+                })}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {(errorCount > 0 || warnCount > 0) && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-sm">

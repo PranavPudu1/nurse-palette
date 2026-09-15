@@ -82,6 +82,54 @@ export type Database = {
           },
         ]
       }
+      day_off_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          end_date: string
+          id: string
+          nurse_id: string
+          reason: string | null
+          start_date: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          end_date: string
+          id?: string
+          nurse_id: string
+          reason?: string | null
+          start_date: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          end_date?: string
+          id?: string
+          nurse_id?: string
+          reason?: string | null
+          start_date?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "day_off_requests_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "day_off_requests_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nurse_preferences: {
         Row: {
           created_at: string
@@ -205,6 +253,33 @@ export type Database = {
           phone?: string | null
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      schedule_generations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          month: number
+          options: Json
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month: number
+          options: Json
+          year: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month?: number
+          options?: Json
+          year?: number
         }
         Relationships: []
       }

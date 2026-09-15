@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { year, month } = await req.json();
+    const { year, month, extra_unavailability, num_options } = await req.json();
     const days = getDaysInMonth(year, month);
     const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
     const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(days).padStart(2, "0")}`;
@@ -83,6 +83,18 @@ Deno.serve(async (req) => {
       nurse_id: u.nurse_id,
       day: parseInt(u.date.split("-")[2], 10),
     }));
+
+    // What-if previews pass hypothetical days off (e.g. "as if this pending
+    // request were approved") without writing them to the database.
+    for (const u of (extra_unavailability ?? [])) {
+      if (u?.nurse_id && typeof u?.date === "string"
+          && u.date >= startDate && u.date <= endDate) {
+        unavailability.push({
+          nurse_id: u.nurse_id,
+          day: parseInt(u.date.split("-")[2], 10),
+        });
+      }
+    }
 
     const exclusions = (exclRes.data ?? []).map((e: any) => ({
       nurse_id_1: e.nurse_id_1,
@@ -152,7 +164,7 @@ Deno.serve(async (req) => {
       exclusions,
       soft_constraints: softConstraints,
       hard_constraints: hardConstraints,
-      num_options: 3,
+      num_options: num_options ?? 3,
       time_limit_seconds: 10.0,
     };
 

@@ -144,25 +144,25 @@ const T: Record<string, { en: string; ko: string }> = {
   "cmp.best": { en: "Best", ko: "최고" },
   "cmp.cost": { en: "Cost", ko: "비용" },
   "cmp.costHelp": {
-    en: "Lower staffing cost scores higher (nights & overtime cost more).",
-    ko: "인건비가 낮을수록 점수가 높습니다 (야간·초과 근무는 비용이 큽니다).",
+    en: "100 minus estimated staffing cost, scaled per nurse. Computed in the app from flat rates: base pay per shift, a night premium, and overtime above 40 hours a week. Not the optimizer's internal cost.",
+    ko: "간호사당 예상 인건비를 100에서 뺀 값입니다. 앱에서 고정 단가(근무당 기본급, 야간 수당, 주 40시간 초과 근무 수당)로 계산하며, 최적화 엔진 내부 비용과는 다릅니다.",
   },
   "cmp.fairness": { en: "Fairness", ko: "공정성" },
   "cmp.fairnessHelp": {
-    en: "How evenly total shifts are spread across nurses — 100 = everyone works the same number.",
-    ko: "근무가 간호사들에게 얼마나 고르게 배분되는지입니다. 100이면 모두 같은 횟수로 일합니다.",
+    en: "100 minus 20 x the standard deviation of total shifts per nurse. 100 means everyone works exactly the same number of shifts.",
+    ko: "간호사별 총 근무 수의 표준편차에 20을 곱해 100에서 뺀 값입니다. 100이면 모두 정확히 같은 횟수로 일합니다.",
   },
   "cmp.violations": { en: "Violations", ko: "규칙 위반" },
   "cmp.violationsHelp": {
-    en: "Fewer rule breaks scores higher (each error −15, each warning −5).",
-    ko: "규칙 위반이 적을수록 점수가 높습니다 (오류당 −15점, 경고당 −5점).",
+    en: "Starts at 100; each hard-rule error subtracts 15 points and each soft warning subtracts 5.",
+    ko: "100점에서 시작해 필수 규칙 오류당 15점, 선호 경고당 5점을 뺍니다.",
   },
   "cmp.nErrorsHard": { en: "{n} errors (hard)", ko: "오류(필수) {n}건" },
   "cmp.nWarningsSoft": { en: "{n} warnings (soft)", ko: "경고(선호) {n}건" },
   "cmp.score": { en: "Score: {n}", ko: "점수: {n}" },
   "cmp.scoreHelp": {
-    en: "Overall 0–100, higher is better = 25% Cost + 35% Fairness + 40% Violations.",
-    ko: "0–100점, 높을수록 좋습니다. 비용 25% + 공정성 35% + 규칙 위반 40%로 계산합니다.",
+    en: "Overall 0–100, higher is better: 25% Cost + 35% Fairness + 40% Violations. Computed in the app from the displayed schedule, independent of the optimizer.",
+    ko: "0–100점, 높을수록 좋습니다. 비용 25% + 공정성 35% + 규칙 위반 40%로 앱에서 표시된 근무표를 기준으로 계산하며, 최적화 엔진과는 별개입니다.",
   },
   "cmp.preview": { en: "{label} — Preview", ko: "{label} 미리보기" },
   "cmp.apply": { en: "Apply {label}", ko: "{label} 적용" },
@@ -227,6 +227,64 @@ const T: Record<string, { en: string; ko: string }> = {
   "soft.t.avoid_night": { en: "Avoid Night Shifts", ko: "야간 근무 기피" },
   "soft.t.soft_max_nights": { en: "Soft Max Nights Cap", ko: "야간 근무 상한 (소프트)" },
   "soft.t.maximize_shifts": { en: "Maximize Shifts", ko: "근무 최대화" },
+
+  // === Day-off requests ===
+  "tab.requests": { en: "Requests", ko: "휴무 요청" },
+  "req.title": { en: "Day-Off Requests", ko: "휴무 요청" },
+  "req.subtitle": {
+    en: "Nurses request date ranges off; approve or deny them here. Approved days become unavailable dates the schedule generator must respect.",
+    ko: "간호사가 신청한 휴무 기간을 여기서 승인하거나 거부합니다. 승인된 날짜는 근무표 생성 시 반드시 지켜야 하는 근무 불가 날짜가 됩니다.",
+  },
+  "req.pending": { en: "Pending", ko: "대기 중" },
+  "req.nonePending": { en: "No pending requests.", ko: "대기 중인 요청이 없습니다." },
+  "req.history": { en: "Decided", ko: "처리됨" },
+  "req.approve": { en: "Approve", ko: "승인" },
+  "req.deny": { en: "Deny", ko: "거부" },
+  "req.approved": { en: "Approved", ko: "승인됨" },
+  "req.denied": { en: "Denied", ko: "거부됨" },
+  "req.pendingBadge": { en: "Pending", ko: "대기 중" },
+  "req.submitted": { en: "Submitted {date}", ko: "{date} 제출" },
+  "req.days": { en: "{n} day(s)", ko: "{n}일" },
+  "req.preview": { en: "Preview impact", ko: "영향 미리보기" },
+  "req.previewNote": {
+    en: "Solves the {month} schedule twice: once as if denied, once as if approved. Takes about 20 seconds.",
+    ko: "{month} 근무표를 두 번 계산합니다: 거부한 경우와 승인한 경우. 약 20초 걸립니다.",
+  },
+  "req.solving": { en: "Solving both schedules… about 20 seconds", ko: "두 근무표를 계산 중입니다… 약 20초" },
+  "req.ifDeny": { en: "If you deny", ko: "거부하는 경우" },
+  "req.ifApprove": { en: "If you approve", ko: "승인하는 경우" },
+  "req.viewSchedule": { en: "View full schedule", ko: "전체 근무표 보기" },
+  "req.previewFailed": { en: "Preview failed: {msg}", ko: "미리보기 실패: {msg}" },
+  "req.approvedToast": {
+    en: "Request approved; the days are now unavailable dates.",
+    ko: "요청이 승인되어 해당 날짜가 근무 불가로 등록되었습니다.",
+  },
+  "req.deniedToast": { en: "Request denied.", ko: "요청이 거부되었습니다." },
+
+  // === Nurse-side requests ===
+  "pref.requestTitle": { en: "Request days off", ko: "휴무 신청" },
+  "pref.requestSub": {
+    en: "Pick a date range; your manager approves or denies it.",
+    ko: "기간을 선택하면 관리자가 승인하거나 거부합니다.",
+  },
+  "pref.from": { en: "From", ko: "시작일" },
+  "pref.to": { en: "To", ko: "종료일" },
+  "pref.submitRequest": { en: "Submit request", ko: "신청하기" },
+  "pref.invalidRange": {
+    en: "The end date must be on or after the start date.",
+    ko: "종료일은 시작일과 같거나 이후여야 합니다.",
+  },
+  "pref.requestAdded": { en: "Request submitted.", ko: "신청이 제출되었습니다." },
+  "pref.myRequests": { en: "My requests", ko: "내 신청 내역" },
+  "pref.noRequests": { en: "No requests yet.", ko: "아직 신청 내역이 없습니다." },
+  "pref.withdraw": { en: "Withdraw", ko: "철회" },
+  "pref.approvedDates": { en: "Approved unavailable dates", ko: "승인된 근무 불가 날짜" },
+  "pref.noApproved": { en: "No upcoming unavailable dates.", ko: "예정된 근무 불가 날짜가 없습니다." },
+
+  // === Saved generations ===
+  "sched.pastGens": { en: "Past generations", ko: "지난 생성 기록" },
+  "sched.pastGenOption": { en: "{time} ({n} options)", ko: "{time} (옵션 {n}개)" },
+  "sched.openGen": { en: "Open", ko: "열기" },
 
   // === Auth ===
   "auth.signInSub": { en: "Sign in to manage schedules", ko: "로그인하여 근무표를 관리하세요" },
