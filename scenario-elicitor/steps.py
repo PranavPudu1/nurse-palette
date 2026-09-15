@@ -63,6 +63,22 @@ def _mock_note(data: dict) -> None:
         st.caption("Demo mode: no API key found, so these are placeholder results.")
 
 
+def _llm_failure_banner(data: dict) -> None:
+    """A loud, page-level banner when a generation call failed.
+
+    The quiet fallback exists so offline tests run; in a live session it made
+    an out-of-credits API account look like a broken app (placeholder cases
+    with no explanation, Sep 16). Errors are surfaced where they happen."""
+    err = (data or {}).get("_error", "")
+    if not err:
+        return
+    hint = (" The OpenAI account is out of credits; add credits at "
+            "platform.openai.com under Billing."
+            if "credit" in err or "insufficient_quota" in err else "")
+    st.error("The AI service returned an error, so placeholder content is "
+             f"shown instead of real results.{hint}\n\nDetails: {err}")
+
+
 # ---------------------------------------------------------------------------
 # Step 0: Agent
 # ---------------------------------------------------------------------------
@@ -201,10 +217,30 @@ def _render_intake_questions() -> None:
     who = (ss.get("sb_audience") or "").strip()
     if not who:
         return          # nothing to ask about until they say who this is for
+    # The questions are minted for a specific age. They used to generate off
+    # the default (9-12) the instant the page opened, so picking 16-18 left
+    # questions about a much younger child on screen. Changing the age
+    # regenerates them; the name does not (it changes on every keystroke).
+    age = (ss.get("sb_age_input") or "").strip()
+    if ss.get("sb_rqi") is not None and "sb_rqi_age" not in ss:
+        ss["sb_rqi_age"] = age    # sessions from before this existed
+    if ss.get("sb_rqi") and ss.get("sb_rqi_age") != age:
+        old = [{"question": (q.get("question") or "").strip(),
+                "answer": (ss.get(f"sb_rai_{i}") or "").strip()}
+               for i, q in enumerate(ss.get("sb_rqi") or [])]
+        store.log_event(_rid(), "describe", "reflect_intake_regen",
+                        {"age_from": ss.get("sb_rqi_age"), "age_to": age,
+                         "previous": old})
+        for i in range(len(ss.get("sb_rqi") or [])):
+            ss.pop(f"sb_rai_{i}", None)
+            ss.pop(f"w_sb_rai_{i}", None)
+        ss.pop("sb_rqi", None)
     if "sb_rqi" not in ss:
         with st.spinner("Preparing two questions..."):
             rq = llm.reflect_intake(ss.sb_agent, _does(), who)
         ss["sb_rqi"] = rq.get("questions") or []
+        ss["sb_rqi_age"] = age
+        _llm_failure_banner(rq)
         store.log_event(_rid(), "describe", "reflect_intake",
                         {"questions": ss["sb_rqi"]})
     if not ss["sb_rqi"]:
@@ -835,6 +871,7 @@ def _ensure_theme_cases(theme: str) -> list[dict]:
         with st.spinner("Writing cases for this theme..."):
             data = llm.expand_theme(ss.sb_agent, _does(), "",
                                     ss.sb_audience, theme, titles, want)
+        _llm_failure_banner(data)
         # theme= forces the category, so a near-miss from the model cannot land
         # a case in a bucket no theme card can reach.
         _append_new(_ingest_scenarios(data, theme=theme))
