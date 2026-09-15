@@ -74,6 +74,13 @@ with no source is worth knowing about too.
 | Each version keeps its own persistent chat thread | The Test stage's compare columns | Switching versions switches threads and nothing is lost, so a reply always traces to the version that produced it | user direction (Sep 2) |
 | Three side-by-side compare columns replace the single chat | The Test stage | Pick a version per column and ask all of them the same things; the case's own question seeds an empty thread | user direction (Sep 2) |
 | A round-2 edit is re-recorded immediately | The theme rounds | Otherwise the export and later rounds keep the pre-edit rule while the person believes they revised it | ours |
+| Sharpen reads: your rule, the questions, then the editable box | The Sharpen stage | Min: show the rule not editable first, then the questions, then the edit, so the flow is followable | Min's review (Sep 16) |
+| Probing questions can be regenerated from the current rule | The Sharpen stage | The questions were minted from one draft and the rule moves on; a staleness note appears when they no longer match | Min's review (Sep 16) |
+| Thin or gibberish rules get fewer, franker questions | Behind the Sharpen questions | The prompt no longer forces three questions; an inadequate rule gets what it supports plus a plain nudge to write more | Min's review (Sep 16) |
+| The final-version pick moved below the comparisons | The Test stage | Min: you look at the final version after comparing, not before; each section carries a one-line instruction | Min's review (Sep 16) |
+| Info icons name the model | Every info icon on generated content | Min asked which model is used; the tooltip now says it | Min's review (Sep 16) |
+| The rubric is view-only | Score + revise | Editing was an iRULER carryover for internal tuning; participants see the criteria but cannot change them | Min's review (Sep 16) |
+| The wizard's bottom Back/Continue hides inside a theme | Any theme workspace | Two nav rows read as one; people clicked the wrong Continue. The workspace keeps its own navigation | Min's review (Sep 16) |
 
 ## Study mechanics
 

@@ -170,6 +170,22 @@ def _esc(s: str) -> str:
     return html.escape(s or "", quote=True)
 
 
+# Entries whose content is produced by the model at run time. Static content
+# (the rubric, the theme list) carries no model line: none was involved.
+_AI_KEYS = {"case", "probe", "reflect_before", "reflect_after",
+            "baseline_reply", "rule_reply", "model_pick", "comparison"}
+
+
+def _model_name() -> str:
+    """Lazy import: llm pulls in the OpenAI client, and provenance is
+    imported by nearly everything."""
+    try:
+        import llm
+        return llm.MODEL
+    except Exception:
+        return "unknown"
+
+
 def icon(key: str) -> str:
     """Inline HTML for the info icon. Returns "" for an unknown key.
 
@@ -180,6 +196,8 @@ def icon(key: str) -> str:
     e = INFO.get(key)
     if not e:
         return ""
+    model = (f'<b>Model</b>{_esc(_model_name())}'
+             if key in _AI_KEYS else "")
     return (
         f'<span class="np-info" tabindex="0" role="button" '
         f'aria-label="How this was made">i'
@@ -188,6 +206,7 @@ def icon(key: str) -> str:
         f'<b>Where it comes from</b>{_esc(e["source"])}'
         f'<b>The prompt, condensed</b>'
         f'<i>{_esc(e["prompt"])}</i>'
+        f'{model}'
         f'</span></span>')
 
 

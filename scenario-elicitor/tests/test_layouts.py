@@ -83,7 +83,7 @@ labels = [e.label for e in at.get("expander")]
 check(any("reflections" in (l or "").lower() for l in labels),
       "stage 1 shows the reflections accordion")
 check(any("rubric" in (l or "").lower() for l in labels),
-      "the rubric editor is reachable on the score stage")
+      "the rubric is viewable on the score stage")
 click(at, "Check my answer")
 check(not at.exception, f"check ran ({at.exception})")
 
@@ -94,9 +94,16 @@ check(len(sget(ss, f"sb_vers_{idx}") or []) == 2, "the edit saved as v2")
 check(sget(ss, f"sb_vsel_{idx}") == "v2", "the dropdown selected v2")
 check(next_stage(at) == "moved", "onward to Sharpen")
 
-# Stage 2: Sharpen. The rule stays visible in the same spot; never blocks.
+# Stage 2: Sharpen. Rule card, questions, then the editable box; never blocks.
 check(any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
       "Sharpen keeps the rule box on screen")
+check("The rule you wrote" in " ".join(str(getattr(m, "value", ""))
+                                       for m in at.markdown),
+      "Sharpen shows the written rule read-only above the questions")
+_qs_before = sget(ss, f"sb_rqa_{idx}")
+click(at, "New questions from my current rule")
+check(not at.exception, f"regenerate ran ({at.exception})")
+check(bool(sget(ss, f"sb_rqa_{idx}")), "regenerate produced questions")
 check(next_stage(at) == "moved", "Sharpen never blocks")
 
 # Stage 3: Test. Final dropdown + three compare columns.

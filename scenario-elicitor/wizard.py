@@ -259,9 +259,14 @@ def render() -> None:
     _stepper()
     st.write("")
     import steps as step_bodies  # local import avoids a circular dependency
-    step_bodies.render(steps()[cur_index()]["key"])
-    st.divider()
-    _nav()
+    key = steps()[cur_index()]["key"]
+    step_bodies.render(key)
+    # Inside a theme the workspace has its own navigation; the wizard-level
+    # Back/Continue at the bottom only got mistaken for it (Min: people
+    # clicked it thinking they had to continue). It returns on the menu.
+    if not (key == "themes" and st.session_state.get("sb_theme")):
+        st.divider()
+        _nav()
     # Autosave: upsert the latest sb_* state so the session can resume later.
     rid = st.session_state.get("resp_id")
     if rid:

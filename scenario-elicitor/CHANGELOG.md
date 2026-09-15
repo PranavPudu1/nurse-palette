@@ -8,6 +8,34 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.8 — 2026-09-16 — Min's review round: follow-the-flow fixes
+
+Everything here traces to the Sep 16 review with Min and Eve.
+
+- **Sharpen reordered**: the rule you wrote (read-only), then the probing
+  questions, then the editable box at the end, so revising is the obvious
+  last act.
+- **Regenerate probing questions** from the current rule, with a staleness
+  note when the rule has changed since the questions were made. Old answers
+  are logged to events (reflect_after_regen) before being replaced.
+- **Gibberish/skip failsafe**: the question prompt writes up to three
+  questions instead of exactly three; an empty, refused, or too-thin rule
+  gets only what it supports plus a plain nudge to actually write the rule.
+  Check now requires a minimally real draft.
+- **Test stage swapped**: working box first, compare columns in the middle,
+  the final-version pick and Save at the end. One-sentence instructions on
+  each section, styled large enough to notice.
+- **Model shown**: every info icon on generated content carries a
+  "Model: gpt-4o-mini" line.
+- **Rubric is view-only** for participants (the editor was an iRULER
+  carryover for internal tuning).
+- **One nav at a time**: the wizard's bottom Back/Continue disappears inside
+  a theme, where it was being mistaken for the stage navigation.
+
+Deployment: `DEPLOY_ID`.
+
+---
+
 ## v0.7 — 2026-09-02 — usable on phones
 
 - **Mobile sweep, CSS only.** All rules live inside a max-width 700px media

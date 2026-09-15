@@ -636,6 +636,15 @@ def _show_flash(key: str) -> None:
         st.warning(msg)
 
 
+def _instruction(text: str) -> None:
+    """A what-to-do line, deliberately bigger than a caption.
+
+    Min asked for one-sentence instructions on each section that people
+    actually notice; st.caption renders too small for that."""
+    st.markdown(f'<div class="np-sub" style="margin:2px 0 10px;color:{FG};">'
+                f'{text}</div>', unsafe_allow_html=True)
+
+
 def sync_widget_mirrors() -> None:
     """Copy every mounted mirrored widget's value back to its canonical key.
 
@@ -751,44 +760,22 @@ def _reflection_answers(idx: int) -> list[dict]:
     return out
 
 
-def _save_rubric_edits() -> None:
-    ss = st.session_state
-    new_rubric = []
-    for i, c in enumerate(ss.sb_rubric):
-        name = (ss.get(f"sb_rname_{i}") or c["name"]).strip() or c["name"]
-        weight = int(ss.get(f"sb_rweight_{i}", c["weight"]))
-        lines = [ln.strip() for ln in
-                 (ss.get(f"sb_rlevels_{i}") or "").splitlines() if ln.strip()]
-        levels = dict(c["levels"])
-        for j, ln in enumerate(lines[:4]):
-            levels[str(4 - j)] = ln
-        new_rubric.append({"name": name, "weight": weight, "levels": levels})
-    total = sum(c["weight"] for c in new_rubric) or 1
-    for c in new_rubric:   # normalize so weights always sum to 100
-        c["weight"] = round(c["weight"] * 100 / total)
-    drift = 100 - sum(c["weight"] for c in new_rubric)
-    new_rubric[0]["weight"] += drift
-    ss.sb_rubric = new_rubric
-    store.log_event(_rid(), "themes", "rubric_edit", {"rubric": new_rubric})
+def _render_rubric_view() -> None:
+    """The rubric, readable but no longer editable.
 
-
-def _render_rubric_editor() -> None:
+    The editable form was an iRULER carryover, useful while the rubric was
+    being tuned internally. Min: in this context it is not going to be
+    editable. It stays visible because seeing the criteria helps people aim
+    their rule (Eve: the rubric would guide what the rule should look like).
+    """
     ss = st.session_state
-    with st.expander("View or adjust the rubric"):
-        st.caption("Your answers are checked against this rubric. Edit anything: "
-                   "names, weights, or the level descriptions (top line = level 4, "
-                   "best). Weights are normalized to 100.")
-        with st.form("sb_rubric_form"):
-            for i, c in enumerate(ss.sb_rubric):
-                col1, col2 = st.columns([3, 1], gap="small")
-                col1.text_input("Criterion", value=c["name"], key=f"sb_rname_{i}")
-                col2.number_input("Weight %", min_value=0, max_value=100,
-                                  value=int(c["weight"]), key=f"sb_rweight_{i}")
-                st.text_area("Levels 4 to 1, one per line",
-                             value="\n".join(c["levels"][str(v)]
-                                             for v in range(4, 0, -1)),
-                             key=f"sb_rlevels_{i}", height=110)
-            st.form_submit_button("Save rubric", on_click=_save_rubric_edits)
+    with st.expander("View the rubric your rule is checked against"):
+        st.caption("Your rule is scored on these criteria. Higher levels are "
+                   "more specific and more actionable.")
+        for c in ss.sb_rubric:
+            st.markdown(f"**{c['name']}** ({c['weight']}%)")
+            for v in range(4, 0, -1):
+                st.caption(f"Level {v}: {c['levels'][str(v)]}")
 
 
 # ---------------------------------------------------------------------------
@@ -1020,7 +1007,7 @@ def _render_scores(fb: dict | None, rubric: list[dict], idx: int,
     # the bottom of the page and was silently dropped when the workspace was
     # split into layouts; anchoring it here means every layout gets it and none
     # can lose it again. Collapsed, it costs one line.
-    _render_rubric_editor()
+    _render_rubric_view()
 
     # The nudge that replaced the AI revision: their own words, pointed at the
     # box beside this column, with no generated text to accept.
@@ -1115,20 +1102,37 @@ def _ui_before(idx: int, scenario: dict) -> None:
 
 
 def _ui_after(idx: int) -> None:
-    """The after-questions, alone on their stage. A placeholder Min may cut.
+    """The after-questions on Sharpen, about the rule as written.
 
     They only exist after the first rubric check generates them; before that
-    the stage says so instead of sitting empty.
+    the stage says so instead of sitting empty. The regenerate button exists
+    because the questions were minted from one draft and the rule moves on;
+    Min asked for a way to bring them back in line with the current text.
     """
     ss = st.session_state
     section("Now that you have written it")
-    if not ss.get(f"sb_rqa_{idx}"):
+    qs = ss.get(f"sb_rqa_{idx}")
+    if not qs:
         st.caption("These questions unlock after you check your rule on the "
                    "previous stage. They are optional either way.")
         return
-    st.caption("These ask about your reasoning, not whether the rule is good. "
-               "They are optional.")
-    _render_reflection(idx, "a", ss[f"sb_rqa_{idx}"])
+    _instruction("Answer these questions about your reasoning. They are "
+                 "optional, and there are no wrong answers.")
+    _render_reflection(idx, "a", qs)
+    if len(qs) < prompts.N_REFLECT_AFTER:
+        st.caption("Write more in your rule and regenerate to get more "
+                   "questions.")
+    src = (ss.get(f"sb_rqa_src_{idx}") or "").strip()
+    live = _live(f"sb_answer_{idx}").strip()
+    if src and live and src != live:
+        st.caption("Your rule changed since these questions were made. "
+                   "Regenerate to match what it says now.")
+    st.button("New questions from my current rule", key=f"sb_regen_{idx}",
+              type="secondary",
+              help="Rereads the rule as it stands and asks fresh questions "
+                   "about it. Your current answers are kept in the study log.",
+              on_click=_regen_questions_click, args=(idx,))
+    _show_flash(f"_flash_regen_{idx}")
 
 
 def _ui_rule(idx: int, height: int = 200) -> None:
@@ -1160,11 +1164,22 @@ def _save_version_click(idx: int) -> None:
 def _check_click(idx: int) -> None:
     ss = st.session_state
     draft = _live(f"sb_answer_{idx}").strip()
-    if not draft:
+    if len(draft) < MIN_ANSWER:
         ss[f"_flash_vers_{idx}"] = "Write your rule first, then check it."
         return
     ss[f"sb_answer_{idx}"] = draft
     _flag("_sb_check")
+
+
+def _regen_questions_click(idx: int) -> None:
+    ss = st.session_state
+    draft = _live(f"sb_answer_{idx}").strip()
+    if len(draft) < MIN_ANSWER:
+        ss[f"_flash_regen_{idx}"] = ("Write your rule first; the questions "
+                                     "are about what you wrote.")
+        return
+    ss[f"sb_answer_{idx}"] = draft
+    _flag("_sb_requestions")
 
 
 def _ui_rule_versioned(idx: int, height: int = 170, check: bool = False) -> None:
@@ -1383,19 +1398,40 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
     cur = _stage(idx)
     draft = (ss.get(f"sb_answer_{idx}") or "").strip()
     if cur == 3:
+        # Min's swap: comparing comes first, the final pick comes last.
+        # Picking a final rule before seeing the versions side by side read
+        # backwards to everyone in the review.
         _render_stage_rail(idx)
-        left, right = st.columns([1, 1.3], gap="medium")
-        with left:
-            _ui_final_panel(idx)
-        with right:
+        boxcol, notecol = st.columns([1.6, 1], gap="medium")
+        with boxcol:
+            _instruction("Edit your rule here and save versions, so you can "
+                         "compare them below.")
             _ui_rule_versioned(idx, height=130)
+        with notecol:
+            st.markdown(
+                '<div class="np-card-muted"><div class="np-section-title">'
+                'How this screen works</div><div class="np-sub">'
+                '1. Save versions of your rule in the box.<br>'
+                '2. Chat with them side by side below.<br>'
+                '3. Pick your final version at the bottom.</div></div>',
+                unsafe_allow_html=True)
         st.divider()
+        _instruction("Compare the versions you wrote: pick a version in each "
+                     "column and ask it questions. Original is the agent "
+                     "with no rule at all.")
         c0, c1, c2 = st.columns(3, gap="medium")
         for k, col in enumerate((c0, c1, c2)):
             with col:
                 _ui_compare_column(idx, k, scenario)
+        st.divider()
+        fincol, savecol = st.columns([1.3, 1], gap="medium")
+        with fincol:
+            _instruction("Done comparing? Pick the version you want to keep.")
+            _ui_final_panel(idx)
+        with savecol:
+            _instruction("Then save it. The next screens test this rule.")
+            _ui_save(theme, cases, idx)
         _render_stage_nav(idx)
-        _ui_save(theme, cases, idx)
         return
     left, right = st.columns(_C_SPLIT[cur], gap="medium")
     with left:
@@ -1403,10 +1439,14 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
     with right:
         _render_stage_rail(idx)
         if cur == 0:
+            _instruction("Read the three conversations on the left, answer "
+                         "the questions below, then write one rule that "
+                         "should hold across all of them.")
             _ui_before(idx, scenario)
-            st.caption("With this information, write your rule.")
             _ui_rule(idx, height=150)
         elif cur == 1:
+            _instruction("Check your rule to score it against the rubric. "
+                         "Edit it here and save new versions as it improves.")
             _ui_rule_versioned(idx, height=170, check=True)
             with st.expander("Your reflections"):
                 answered = [r for r in _reflection_answers(idx)
@@ -1417,11 +1457,20 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
                     st.markdown(f"**{r['question']}**")
                     st.markdown(r["answer"])
             _render_scores(ss.get(f"sb_fb_{idx}"), ss.sb_rubric, idx, draft)
+            if ss.get(f"sb_fb_{idx}"):
+                _instruction("Use this feedback to edit your rule above and "
+                             "check it again, or go to Sharpen when you are "
+                             "happy with it.")
         else:
-            # Sharpen: the rule stays in the exact same spot as Score + revise,
-            # with the after-questions pushed below it.
-            _ui_rule_versioned(idx, height=170)
+            # Sharpen reads top to bottom the way Min described it: the rule
+            # you wrote, shown not editable; the questions about it; then the
+            # box to revise it. Editing above the questions buried the point
+            # of the stage.
+            _render_rule_reminder(idx, title="The rule you wrote")
             _ui_after(idx)
+            _instruction("Use your answers to sharpen the rule here, then "
+                         "save it as a new version.")
+            _ui_rule_versioned(idx, height=150)
         _render_stage_nav(idx)
 
 
@@ -1468,6 +1517,7 @@ def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> No
                 rq = llm.reflect_after(ss.sb_agent, _does(), ss.sb_audience,
                                        scenario, draft)
             ss[f"sb_rqa_{idx}"] = rq.get("questions") or []
+            ss[f"sb_rqa_src_{idx}"] = draft
             store.log_event(_rid(), "themes", "reflect_after",
                             {"theme": ss.sb_theme,
                              "questions": ss[f"sb_rqa_{idx}"]})
@@ -1475,6 +1525,26 @@ def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> No
                         {"theme": ss.sb_theme, "draft": draft,
                          "levels": _levels_by_name(ss[f"sb_fb_{idx}"]),
                          "n_check": ss[f"sb_nrev_{idx}"]})
+    if ss.get("_sb_requestions"):
+        del ss["_sb_requestions"]
+        draft = (ss.get(f"sb_answer_{idx}") or "").strip()
+        # The old questions and whatever was typed under them go to the event
+        # log before being replaced: iterations are data, not scratch.
+        pairs = []
+        for i, q in enumerate(ss.get(f"sb_rqa_{idx}") or []):
+            k = f"sb_raa_{idx}_{i}"
+            pairs.append({"question": (q.get("question") or "").strip(),
+                          "answer": (ss.get(k) or "").strip()})
+            ss.pop(k, None)
+            ss.pop(f"w_{k}", None)
+        with st.spinner("Rereading your rule..."):
+            rq = llm.reflect_after(ss.sb_agent, _does(), ss.sb_audience,
+                                   scenario, draft)
+        ss[f"sb_rqa_{idx}"] = rq.get("questions") or []
+        ss[f"sb_rqa_src_{idx}"] = draft
+        store.log_event(_rid(), "themes", "reflect_after_regen",
+                        {"theme": ss.sb_theme, "previous": pairs,
+                         "questions": ss[f"sb_rqa_{idx}"]})
     pending = ss.get("_sb_ask")
     if pending and pending[0] == idx:
         del ss["_sb_ask"]
@@ -1745,13 +1815,13 @@ def _render_theme_test() -> None:
         st.caption("This round is scored. Nothing you do here changes the rule.")
 
 
-def _render_rule_reminder(idx: int) -> None:
+def _render_rule_reminder(idx: int, title: str = "Your rule") -> None:
     """The rule under test, always on screen while it is being tested."""
     rule = (st.session_state.get(f"sb_answer_{idx}") or "").strip()
     if not rule:
         return
     st.markdown(f'<div class="np-card-muted" style="margin-bottom:10px;">'
-                f'<div class="np-section-title">Your rule</div>'
+                f'<div class="np-section-title">{title}</div>'
                 f'<div class="np-muted">{rule}</div></div>',
                 unsafe_allow_html=True)
 
