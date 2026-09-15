@@ -50,6 +50,13 @@ CREATE POLICY "Managers can manage schedule generations" ON public.schedule_gene
 
 CREATE INDEX idx_schedule_generations_month ON public.schedule_generations (year, month, created_at DESC);
 
+-- Postgres-level grants (RLS still gates row access). Added after the first
+-- live apply: tables created by a raw migration do not inherit the default
+-- grants, and without them the app roles cannot touch the tables at all.
+GRANT ALL ON TABLE public.day_off_requests TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.schedule_generations TO anon, authenticated, service_role;
+
+
 -- ============================================================
 -- ONLY needed if Lovable's GitHub sync did not apply the migration above
 -- automatically: paste this whole file into the Supabase dashboard SQL
