@@ -32,7 +32,7 @@ Everything here traces to the Sep 16 review with Min and Eve.
 - **One nav at a time**: the wizard's bottom Back/Continue disappears inside
   a theme, where it was being mistaken for the stage navigation.
 
-Deployment: `DEPLOY_ID`.
+Deployment: `b4ff6441-3955-4e7f-86e6-00c51d64c817`.
 
 ---
 
