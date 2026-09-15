@@ -391,10 +391,26 @@ def build_and_solve(req: ScheduleRequest, prev_solutions: list[dict] = None):
 
     # ── Solve ──
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = req.time_limit_seconds
     solver.parameters.num_search_workers = 4
-
+    # Stop early once provably within 2% of optimal (rarely provable here,
+    # but free when it is).
+    solver.parameters.relative_gap_limit = 0.02
+    # Fast pass: 3 seconds finds essentially the same schedules the full
+    # budget does (measured 1-2.5% on the internal objective; the app
+    # rescores client-side so this number is never shown). The rest of the
+    # old 10-second budget went to an optimality proof that never finishes,
+    # which made a 3-option generation take 30 seconds. If the fast pass
+    # finds nothing and infeasibility is NOT proven (status UNKNOWN), retry
+    # once with the caller's full budget so hard instances cannot falsely
+    # report "no feasible schedule".
+    fast_limit = min(req.time_limit_seconds, 3.0)
+    solver.parameters.max_time_in_seconds = fast_limit
     status = solver.solve(model)
+    if (status not in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+            and status != cp_model.INFEASIBLE
+            and fast_limit < req.time_limit_seconds):
+        solver.parameters.max_time_in_seconds = req.time_limit_seconds
+        status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return None, None, None
 
