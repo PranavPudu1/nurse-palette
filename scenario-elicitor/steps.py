@@ -711,21 +711,56 @@ def _instruction(text: str) -> None:
                 f'{text}</div>', unsafe_allow_html=True)
 
 
-def _numbered_steps(items: list[str]) -> None:
-    """The page's marching orders as numbered lines, big enough to be the
-    first thing read. Used where a screen has a fixed reading order."""
-    rows = "".join(
-        f'<div style="display:flex;align-items:baseline;gap:9px;'
-        f'margin-bottom:5px;">'
-        f'<span style="flex:0 0 auto;display:inline-flex;align-items:center;'
-        f'justify-content:center;width:21px;height:21px;border-radius:999px;'
-        f'background:{PRIMARY};color:#fff;font-size:12px;font-weight:700;">'
-        f'{n}</span>'
-        f'<span style="font-size:15.5px;font-weight:600;color:{FG};'
-        f'line-height:1.45;">{text}</span></div>'
-        for n, text in enumerate(items, 1))
-    st.markdown(f'<div style="margin:2px 0 14px;">{rows}</div>',
+_CW_STEPS = ("Read the three conversations on the left.",
+             "Answer the questions.",
+             "Write one rule that should hold across all of them.")
+
+
+def _cw_header(sub: int) -> None:
+    """Consider + write's three sub-steps: done ones dimmed with a check,
+    the current one big and bold, later ones dimmed. The screen reveals one
+    sub-step at a time instead of showing everything at once."""
+    rows = []
+    for i, text in enumerate(_CW_STEPS):
+        if i < sub:
+            badge_bg, badge_fg, badge = SURFACE_BG, MUTED_FG, "&#10003;"
+            style = f"font-size:13px;color:{MUTED_FG};"
+        elif i == sub:
+            badge_bg, badge_fg, badge = PRIMARY, "#fff", str(i + 1)
+            style = f"font-size:17px;font-weight:700;color:{FG};"
+        else:
+            badge_bg, badge_fg, badge = SURFACE_BG, MUTED_FG, str(i + 1)
+            style = f"font-size:13px;color:{MUTED_FG};"
+        rows.append(
+            f'<div style="display:flex;align-items:baseline;gap:9px;'
+            f'margin-bottom:6px;">'
+            f'<span style="flex:0 0 auto;display:inline-flex;'
+            f'align-items:center;justify-content:center;width:21px;'
+            f'height:21px;border-radius:999px;background:{badge_bg};'
+            f'color:{badge_fg};font-size:12px;font-weight:700;">{badge}'
+            f'</span><span style="{style}line-height:1.45;">{text}'
+            f'</span></div>')
+    st.markdown(f'<div style="margin:2px 0 14px;">{"".join(rows)}</div>',
                 unsafe_allow_html=True)
+
+
+def _cw_sub(idx: int) -> int:
+    return int(st.session_state.get(f"sb_cw_{idx}", 0))
+
+
+def _cw_done_reading(idx: int) -> None:
+    st.session_state[f"sb_cw_{idx}"] = 1
+
+
+def _cw_done_answering(idx: int) -> None:
+    ss = st.session_state
+    sync_widget_mirrors()
+    missing = _unanswered(idx, "b")
+    if missing:
+        ss[f"_flash_cw_{idx}"] = _needs(len(missing),
+                                        len(_question_slots(idx, "b")))
+        return
+    ss[f"sb_cw_{idx}"] = 2
 
 
 def sync_widget_mirrors() -> None:
@@ -1534,14 +1569,20 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
     with right:
         _render_stage_rail(idx)
         if cur == 0:
-            _numbered_steps([
-                "Read the three conversations on the left.",
-                "Answer the questions below.",
-                "Write one rule for how the AI should react in situations "
-                "like these.",
-            ])
-            _ui_before(idx, scenario)
-            _ui_rule(idx, height=150)
+            sub = _cw_sub(idx)
+            _cw_header(sub)
+            if sub == 0:
+                st.button("Done reading", key=f"sb_cwr_{idx}", type="primary",
+                          on_click=_cw_done_reading, args=(idx,))
+            elif sub == 1:
+                _ui_before(idx, scenario)
+                st.button("Done answering", key=f"sb_cwa_{idx}",
+                          type="primary",
+                          on_click=_cw_done_answering, args=(idx,))
+                _show_flash(f"_flash_cw_{idx}")
+            else:
+                _ui_before(idx, scenario)
+                _ui_rule(idx, height=150)
         elif cur == 1:
             _instruction("Check your rule to score it against the rubric. "
                          "Edit it here and save new versions as it improves.")
@@ -1569,7 +1610,8 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
             _instruction("Use your answers to sharpen the rule here, then "
                          "save it as a new version.")
             _ui_rule_versioned(idx, height=150)
-        _render_stage_nav(idx)
+        if cur != 0 or _cw_sub(idx) == 2:
+            _render_stage_nav(idx)
 
 
 def _render_theme_workspace() -> None:

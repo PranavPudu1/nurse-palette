@@ -181,7 +181,7 @@ _SNAPSHOT_KEYS = {
 }
 _SNAPSHOT_PREFIXES = ("sb_answer_", "sb_first_", "sb_fb_", "sb_lastfb_",
                       "sb_stage_", "sb_final_",
-                      "sb_nrev_", "sb_cnote_",
+                      "sb_nrev_", "sb_cnote_", "sb_cw_",
                       "sb_chat_", "sb_pick_", "sb_vq_", "sb_vcmp_",
                       # first-class versions and their per-version threads
                       "sb_vers_", "sb_vsel_", "sb_chats_", "sb_cmpv_",

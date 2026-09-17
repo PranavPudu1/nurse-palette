@@ -63,13 +63,20 @@ check(not any(r.key == "sb_layout" for r in at.radio),
       "no layout switcher anywhere (split is the only layout)")
 idx = ss["sb_idx"]
 
-# Stage 0: Consider + write. Rule box present on the SAME stage as questions.
-check(any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
-      "stage 0 has the rule box below the questions")
-check(next_stage(at) == "blocked", "Next blocked with questions unanswered")
+# Stage 0: Consider + write, revealed one sub-step at a time.
+check(not any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
+      "no rule box before the read sub-step is done")
+check(next_stage(at) == "none", "no Next before the sub-steps finish")
+check(click(at, "Done reading"), "Done reading advances")
+check(click(at, "Done answering"), "Done answering exists")
+check(ss[f"sb_cw_{idx}"] == 1, "answering gate holds while questions blank")
 for w in [w for w in at.text_area
           if w.key and w.key.startswith((f"w_sb_rap_{idx}", f"w_sb_rab_{idx}_"))]:
     at.text_area(key=w.key).set_value(ANS).run()
+check(click(at, "Done answering"), "Done answering clickable")
+check(ss[f"sb_cw_{idx}"] == 2, "answered questions open the write sub-step")
+check(any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
+      "the rule box appears on the write sub-step")
 check(next_stage(at) == "blocked", "Next still blocked with no rule written")
 at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
 check(next_stage(at) == "moved", "Next opens once questions + first draft exist")

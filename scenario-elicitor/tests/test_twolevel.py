@@ -67,13 +67,20 @@ def to_stage(at, n_next):
 for n in range(wizard.N_THEMES):
     assert click(at, "Write a rule for this"), f"open theme {n+1}"
     theme, idx = ss["sb_theme"], ss["sb_idx"]
-    # stage 0 gates on questions AND a first draft
+    # revealed sub-steps: read -> answer -> write; Next only at the end
+    assert not [b for b in at.button if b.label.startswith("Next:")], \
+        "Next visible before the sub-steps finished"
+    assert click(at, "Done reading"), "Done reading missing"
+    click(at, "Done answering")
+    assert ss[f"sb_cw_{idx}"] == 1, "advanced with questions unanswered"
+    filled = answer_all(idx, "b")
+    assert filled, "no question boxes on screen"
+    assert click(at, "Done answering"), "Done answering missing"
+    assert ss[f"sb_cw_{idx}"] == 2, "answers did not open the write sub-step"
     nxt = [b for b in at.button if b.label.startswith("Next:")][0]
     nxt.click().run()
     assert (f"sb_stage_{idx}" not in ss) or ss[f"sb_stage_{idx}"] == 0, \
-        "Next advanced with questions unanswered"
-    filled = answer_all(idx, "b")
-    assert filled, "no question boxes on screen"
+        "Next advanced with no rule written"
     at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
     to_stage(at, 3)   # -> score, -> sharpen, -> test
     assert click(at, "Save this rule and test it"), "save blocked"
