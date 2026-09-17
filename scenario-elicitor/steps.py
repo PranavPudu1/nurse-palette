@@ -1996,6 +1996,8 @@ def _render_theme_test() -> None:
     header(theme, f"Round {rnd} of {_LAST_ROUND}. Close call {i + 1} of "
                   f"{len(cmps)}. {_THEME_ROUND_INTRO[rnd]}")
     _render_rule_reminder(idx)
+    _section_step(1, "Read the moment and the two replies"
+                     if not revealed else "The moment and the two replies")
     _render_moment(cmp)
 
     model = _rule_answer(cmp, theme) if revealed else {}
@@ -2003,6 +2005,7 @@ def _render_theme_test() -> None:
                     mine=ss.get(f"sb_pick_{cmp['id']}", ""))
 
     if not revealed:
+        _section_step(2, "Pick the one you prefer and say why")
         chosen = _render_pick_controls(cmp, rnd, i)
         st.button("Continue", key=f"sb_tgo_{cmp['id']}", type="primary",
                   disabled=not chosen, on_click=_theme_commit, args=(cmp, i))
@@ -2014,6 +2017,7 @@ def _render_theme_test() -> None:
                        "reaction to it.")
         return
 
+    _section_step(2, "What your rule chose")
     row = _row_for(cmp["id"]) or {}
     same = row.get("choice") == model.get("choice")
     tone = "#2E7D4F" if same else "#B0472F"
@@ -2029,7 +2033,7 @@ def _render_theme_test() -> None:
         unsafe_allow_html=True)
 
     if rnd == 2:
-        section("Change your rule, if it got this wrong")
+        _section_step(3, "Change your rule, if it got this wrong")
         st.caption("This is your rule, not a suggestion from us. Edit it and "
                    "the next comparisons use what you write here.")
         _kept_text(f"sb_answer_{idx}", "Your rule", height=150,
