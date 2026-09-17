@@ -712,7 +712,7 @@ def _instruction(text: str) -> None:
 
 
 _CW_STEPS = ("Read the three conversations on the left.",
-             "Answer the questions.",
+             "Answer the questions below.",
              "Write one rule that should hold across all of them.")
 
 
@@ -1582,6 +1582,9 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
                 _show_flash(f"_flash_cw_{idx}")
             else:
                 _ui_before(idx, scenario)
+                _instruction("Use your answers above: say what the AI "
+                             "should do, what it should not do, and how to "
+                             "handle the hard part.")
                 _ui_rule(idx, height=150)
         elif cur == 1:
             _instruction("Check your rule to score it against the rubric. "
