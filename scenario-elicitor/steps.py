@@ -546,7 +546,7 @@ def _ui_compare_column(idx: int, k: int, scenario: dict) -> None:
                    "them side by side.")
         return
     ss[f"sb_cmpv_{idx}_{k}"] = pick
-    _render_thread(idx, pick, scenario)
+    _render_thread(idx, pick, scenario, height=320)
     dq = _default_question(scenario)
     if dq and not _thread(idx, pick, scenario)["turns"]:
         st.button(f"Ask the case's question", key=f"sb_dq_{idx}_{k}",
@@ -742,6 +742,23 @@ def _cw_header(sub: int) -> None:
             f'</span></div>')
     st.markdown(f'<div style="margin:2px 0 14px;">{"".join(rows)}</div>',
                 unsafe_allow_html=True)
+
+
+def _section_step(n: int, text: str) -> None:
+    """A big numbered orange section heading. Same family as _cw_header but
+    single-line and ungated: on screens where the sections form a loop
+    (compare, edit, compare again), the numbers give the reading order
+    without locking anything."""
+    st.markdown(
+        f'<div style="display:flex;align-items:baseline;gap:9px;'
+        f'margin:4px 0 10px;">'
+        f'<span style="flex:0 0 auto;display:inline-flex;align-items:center;'
+        f'justify-content:center;width:23px;height:23px;border-radius:999px;'
+        f'background:{PRIMARY};color:#fff;font-size:13px;font-weight:700;">'
+        f'{n}</span>'
+        f'<span style="font-size:17px;font-weight:700;color:{PRIMARY};'
+        f'line-height:1.4;">{text}</span></div>',
+        unsafe_allow_html=True)
 
 
 def _cw_sub(idx: int) -> int:
@@ -1229,7 +1246,6 @@ def _ui_after(idx: int) -> None:
     Min asked for a way to bring them back in line with the current text.
     """
     ss = st.session_state
-    section("Now that you have written it")
     qs = ss.get(f"sb_rqa_{idx}")
     if not qs and ss.get(f"sb_rqa_thin_{idx}"):
         _instruction("Your rule is only a few words, so there is nothing to "
@@ -1528,35 +1544,26 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
     cur = _stage(idx)
     draft = (ss.get(f"sb_answer_{idx}") or "").strip()
     if cur == 3:
-        # Min's swap: comparing comes first, the final pick comes last.
-        # Picking a final rule before seeing the versions side by side read
-        # backwards to everyone in the review.
+        # Three numbered sections, ungated: comparing and editing is a loop,
+        # so the numbers give the reading order without locking anything.
         _render_stage_rail(idx)
-        boxcol, notecol = st.columns([1.6, 1], gap="medium")
-        with boxcol:
-            _instruction("Edit your rule here and save versions, so you can "
-                         "compare them below.")
-            _ui_rule_versioned(idx, height=130)
-        with notecol:
-            st.markdown(
-                '<div class="np-card-muted"><div class="np-section-title">'
-                'How this screen works</div><div class="np-sub">'
-                '1. Save versions of your rule in the box.<br>'
-                '2. Chat with them side by side below.<br>'
-                '3. Pick your final version at the bottom.</div></div>',
-                unsafe_allow_html=True)
-        st.divider()
-        _instruction("Compare the versions you wrote: pick a version in each "
-                     "column and ask it questions. Original is the agent "
-                     "with no rule at all.")
+        _section_step(1, "Compare the versions you wrote")
+        _instruction("Pick a version in each column and ask it questions. "
+                     "Original is the agent with no rule at all.")
         c0, c1, c2 = st.columns(3, gap="medium")
         for k, col in enumerate((c0, c1, c2)):
-            with col:
+            with col, st.container(border=True):
                 _ui_compare_column(idx, k, scenario)
         st.divider()
+        _section_step(2, "Update your rule, if you want")
+        _instruction("Edit it here and save it as a new version, then "
+                     "compare again above.")
+        _ui_rule_versioned(idx, height=130)
+        st.divider()
+        _section_step(3, "Pick your final version and save it")
         fincol, savecol = st.columns([1.3, 1], gap="medium")
         with fincol:
-            _instruction("Done comparing? Pick the version you want to keep.")
+            _instruction("The version you pick here is your rule of record.")
             _ui_final_panel(idx)
         with savecol:
             _instruction("Then save it. The next screens test this rule.")
@@ -1606,10 +1613,12 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
         else:
             # Sharpen reads top to bottom the way Min described it: the rule
             # you wrote, shown not editable; the questions about it; then the
-            # box to revise it. Editing above the questions buried the point
-            # of the stage.
-            _render_rule_reminder(idx, title="The rule you wrote")
+            # box to revise it, each under a numbered heading.
+            _section_step(1, "The rule you wrote")
+            _render_rule_reminder(idx)
+            _section_step(2, "Answer the questions about it")
             _ui_after(idx)
+            _section_step(3, "Sharpen your rule")
             _instruction("Use your answers to sharpen the rule here, then "
                          "save it as a new version.")
             _ui_rule_versioned(idx, height=150)
