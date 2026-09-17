@@ -711,6 +711,23 @@ def _instruction(text: str) -> None:
                 f'{text}</div>', unsafe_allow_html=True)
 
 
+def _numbered_steps(items: list[str]) -> None:
+    """The page's marching orders as numbered lines, big enough to be the
+    first thing read. Used where a screen has a fixed reading order."""
+    rows = "".join(
+        f'<div style="display:flex;align-items:baseline;gap:9px;'
+        f'margin-bottom:5px;">'
+        f'<span style="flex:0 0 auto;display:inline-flex;align-items:center;'
+        f'justify-content:center;width:21px;height:21px;border-radius:999px;'
+        f'background:{PRIMARY};color:#fff;font-size:12px;font-weight:700;">'
+        f'{n}</span>'
+        f'<span style="font-size:15.5px;font-weight:600;color:{FG};'
+        f'line-height:1.45;">{text}</span></div>'
+        for n, text in enumerate(items, 1))
+    st.markdown(f'<div style="margin:2px 0 14px;">{rows}</div>',
+                unsafe_allow_html=True)
+
+
 def sync_widget_mirrors() -> None:
     """Copy every mounted mirrored widget's value back to its canonical key.
 
@@ -1517,9 +1534,12 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
     with right:
         _render_stage_rail(idx)
         if cur == 0:
-            _instruction("Read the three conversations on the left, answer "
-                         "the questions below, then write one rule that "
-                         "should hold across all of them.")
+            _numbered_steps([
+                "Read the three conversations on the left.",
+                "Answer the questions below.",
+                "Write one rule for how the AI should react in situations "
+                "like these.",
+            ])
             _ui_before(idx, scenario)
             _ui_rule(idx, height=150)
         elif cur == 1:
