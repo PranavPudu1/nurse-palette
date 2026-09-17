@@ -1127,7 +1127,7 @@ def _render_scores(fb: dict | None, rubric: list[dict], idx: int,
     layout does not jump when feedback arrives and move the box someone is
     typing into.
     """
-    section("How your rule scores")
+    _section_num(2, "How your rule scores")
     levels = _levels_by_name(fb) if fb else {}
     if fb:
         score = prompts.overall_score(rubric, levels)
@@ -1342,7 +1342,8 @@ def _regen_questions_click(idx: int) -> None:
     _flag("_sb_requestions")
 
 
-def _ui_rule_versioned(idx: int, height: int = 170, check: bool = False) -> None:
+def _ui_rule_versioned(idx: int, height: int = 170, check: bool = False,
+                       step: int | None = None) -> None:
     """The rule box with its version dropdown on the title row.
 
     The dropdown answers "which version is this?" at all times: selecting one
@@ -1359,7 +1360,10 @@ def _ui_rule_versioned(idx: int, height: int = 170, check: bool = False) -> None
     ss[f"sb_vsel_{idx}"] = cur
     head, dd = st.columns([2.4, 1], gap="small")
     with head:
-        section("Your rule for this theme")
+        if step is None:
+            section("Your rule for this theme")
+        else:
+            _section_num(step, "Your rule for this theme")
     with dd:
         st.selectbox("Version", labels, index=labels.index(cur),
                      key=f"w_sb_vsel_{idx}", label_visibility="collapsed",
@@ -1608,9 +1612,9 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
                              "handle the hard part.")
                 _ui_rule(idx, height=150)
         elif cur == 1:
-            _instruction("Check your rule to score it against the rubric. "
-                         "Edit it here and save new versions as it improves.")
-            _ui_rule_versioned(idx, height=170, check=True)
+            _instruction("Workshop your rule: check it against the rubric, "
+                         "edit, and save new versions as it improves.")
+            _ui_rule_versioned(idx, height=170, check=True, step=1)
             with st.expander("Your reflections"):
                 answered = [r for r in _reflection_answers(idx)
                             if r["placement"] == "before"]
