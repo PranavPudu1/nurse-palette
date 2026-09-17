@@ -25,7 +25,7 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 - **Loud API-failure banner** replaces silent placeholder fallback; info
   icons name the model in use.
 
-Deployment: recorded on deploy.
+Deployment: `5d763d5d-bf38-4f91-831c-b46f92841564`.
 
 ---
 
