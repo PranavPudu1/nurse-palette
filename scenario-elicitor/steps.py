@@ -679,6 +679,22 @@ def _answered(key: str) -> bool:
     return len(_live(key).strip()) >= MIN_ANSWER
 
 
+_REFUSALS = {"skip", "idk", "no", "na", "n/a", "none", "nothing", "-", "."}
+
+
+def _too_thin(draft: str) -> bool:
+    """A draft with nothing to ask questions about.
+
+    Deterministic guard in front of the question generator: prompt
+    instructions alone did not stop the model from producing three polished
+    questions about the rule "skip". Catches refusals and few-word drafts;
+    longer gibberish is the prompt's job.
+    """
+    d = (draft or "").strip()
+    return (not d or d.lower() in _REFUSALS or len(d) < 20
+            or len(d.split()) < 4)
+
+
 def _show_flash(key: str) -> None:
     """Show and clear a one-shot validation message set by a click handler."""
     msg = st.session_state.pop(key, None)
@@ -1163,6 +1179,16 @@ def _ui_after(idx: int) -> None:
     ss = st.session_state
     section("Now that you have written it")
     qs = ss.get(f"sb_rqa_{idx}")
+    if not qs and ss.get(f"sb_rqa_thin_{idx}"):
+        _instruction("Your rule is only a few words, so there is nothing to "
+                     "ask about yet. Write what the AI should do, what it "
+                     "should not do, and how to handle the hard part, then "
+                     "generate your questions.")
+        st.button("Generate questions from my current rule",
+                  key=f"sb_regen_{idx}", type="primary",
+                  on_click=_regen_questions_click, args=(idx,))
+        _show_flash(f"_flash_regen_{idx}")
+        return
     if not qs:
         st.caption("These questions unlock after you check your rule on the "
                    "previous stage. They are optional either way.")
@@ -1225,9 +1251,10 @@ def _check_click(idx: int) -> None:
 def _regen_questions_click(idx: int) -> None:
     ss = st.session_state
     draft = _live(f"sb_answer_{idx}").strip()
-    if len(draft) < MIN_ANSWER:
-        ss[f"_flash_regen_{idx}"] = ("Write your rule first; the questions "
-                                     "are about what you wrote.")
+    if _too_thin(draft):
+        ss[f"_flash_regen_{idx}"] = ("The rule is still only a few words. "
+                                     "Write what you want the AI to do, then "
+                                     "generate questions about it.")
         return
     ss[f"sb_answer_{idx}"] = draft
     _flag("_sb_requestions")
@@ -1564,14 +1591,22 @@ def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> No
         ss[f"sb_lastfb_{idx}"] = ss[f"sb_fb_{idx}"]
         ss[f"sb_nrev_{idx}"] = ss.get(f"sb_nrev_{idx}", 0) + 1
         if f"sb_rqa_{idx}" not in ss:
-            with st.spinner("Reading what you wrote..."):
-                rq = llm.reflect_after(ss.sb_agent, _does(), ss.sb_audience,
-                                       scenario, draft)
-            ss[f"sb_rqa_{idx}"] = rq.get("questions") or []
-            ss[f"sb_rqa_src_{idx}"] = draft
-            store.log_event(_rid(), "themes", "reflect_after",
-                            {"theme": ss.sb_theme,
-                             "questions": ss[f"sb_rqa_{idx}"]})
+            if _too_thin(draft):
+                # No API call for "skip": Sharpen explains instead of asking
+                # invented questions about a rule that is not there.
+                ss[f"sb_rqa_thin_{idx}"] = True
+                store.log_event(_rid(), "themes", "reflect_after_thin",
+                                {"theme": ss.sb_theme, "draft": draft})
+            else:
+                with st.spinner("Reading what you wrote..."):
+                    rq = llm.reflect_after(ss.sb_agent, _does(),
+                                           ss.sb_audience, scenario, draft)
+                ss[f"sb_rqa_{idx}"] = rq.get("questions") or []
+                ss[f"sb_rqa_src_{idx}"] = draft
+                ss.pop(f"sb_rqa_thin_{idx}", None)
+                store.log_event(_rid(), "themes", "reflect_after",
+                                {"theme": ss.sb_theme,
+                                 "questions": ss[f"sb_rqa_{idx}"]})
         store.log_event(_rid(), "themes", "check",
                         {"theme": ss.sb_theme, "draft": draft,
                          "levels": _levels_by_name(ss[f"sb_fb_{idx}"]),
@@ -1579,6 +1614,7 @@ def _handle_workspace_actions(idx: int, scenario: dict, cases: list[dict]) -> No
     if ss.get("_sb_requestions"):
         del ss["_sb_requestions"]
         draft = (ss.get(f"sb_answer_{idx}") or "").strip()
+        ss.pop(f"sb_rqa_thin_{idx}", None)
         # The old questions and whatever was typed under them go to the event
         # log before being replaced: iterations are data, not scratch.
         pairs = []
