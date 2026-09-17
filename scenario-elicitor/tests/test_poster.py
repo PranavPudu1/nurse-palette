@@ -25,6 +25,7 @@ assert ss["sb_condition"] == conditions.DEFAULT_ARM, ss["sb_condition"]
 assert ss["resp_test"] is True, "poster sessions must be flagged is_test"
 click(at, "Continue")
 at.selectbox(key="sb_age_input").set_value("9-12").run()
+click(at, "Next: two quick questions")
 for _w in [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]:
     at.text_area(key=_w.key).set_value("I want her told, gently.").run()
 click(at, "Continue")

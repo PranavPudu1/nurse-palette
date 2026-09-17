@@ -24,6 +24,7 @@ at.text_input(key="gate_code").set_value("TEST").run(); click(at, "Enter")
 at.text_input(key="gate_name").set_value("T").run(); click(at, "Begin")
 click(at, "Continue")
 at.selectbox(key="sb_age_input").set_value("9-12").run()
+click(at, "Next: two quick questions")
 _intake = [w for w in at.text_area if w.key and w.key.startswith("w_sb_rai_")]
 assert _intake, "no intake questions were asked"
 # Continue is always tappable now; the gate holds by refusing to advance.

@@ -147,6 +147,8 @@ def can_advance(key: str) -> bool:
         import steps
         if not (ss.get("sb_audience") or "").strip():
             return True
+        if "sb_rqi" not in ss:
+            return False   # details not confirmed, questions not generated yet
         return not [k for k, _ in steps._intake_slots() if not steps._answered(k)]
     if key == "themes":
         # Forward travel is only allowed from the menu, never from inside a
@@ -197,6 +199,9 @@ def _blocked_msg(key: str) -> str:
     if key == "agent":
         return "Describe the agent to continue."
     if key == "describe":
+        if "sb_rqi" not in ss:
+            return ("Confirm your child's details first: press the button "
+                    "above to get your two questions.")
         slots = step_bodies._intake_slots()
         missing = [k for k, _ in slots if not step_bodies._answered(k)]
         return (step_bodies._needs(len(missing), len(slots))

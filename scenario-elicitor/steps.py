@@ -205,6 +205,10 @@ def _intake_answers() -> list[dict]:
     return out
 
 
+def _intake_ready() -> None:
+    st.session_state["sb_intake_ready"] = True
+
+
 def _render_intake_questions() -> None:
     """Two questions asked here, before any case has been generated.
 
@@ -217,6 +221,16 @@ def _render_intake_questions() -> None:
     who = (ss.get("sb_audience") or "").strip()
     if not who:
         return          # nothing to ask about until they say who this is for
+    # Nothing generates until the person confirms the age and name are right:
+    # the questions used to appear instantly, built from the default age
+    # before anyone had picked one.
+    if "sb_rqi" not in ss and not ss.get("sb_intake_ready"):
+        st.write("")
+        _instruction("When the age and name above look right, continue. Two "
+                     "short questions about you and your child come next.")
+        st.button("Next: two quick questions", key="sb_intake_go",
+                  type="primary", on_click=_intake_ready)
+        return
     # The questions are minted for a specific age. They used to generate off
     # the default (9-12) the instant the page opened, so picking 16-18 left
     # questions about a much younger child on screen. Changing the age
