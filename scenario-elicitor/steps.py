@@ -652,6 +652,10 @@ def _mic(canonical: str) -> None:
     """
     ss = st.session_state
     mkey = f"w_mic_{canonical}"
+    # Reset requested by the previous run's insert: popping the recorder's
+    # key is only legal before st.audio_input instantiates it this run.
+    if ss.pop(f"_mic_reset_{canonical}", None):
+        ss.pop(mkey, None)
     with st.popover("🎤 Dictate", help="Speak instead of typing. Record, "
                                        "then put the words in the box."):
         audio = st.audio_input("Record, then stop", key=mkey,
@@ -674,11 +678,11 @@ def _mic(canonical: str) -> None:
                 st.warning("Nothing was heard in that recording. Try again "
                            "a little closer to the mic.")
             else:
-                existing = (ss.get(canonical) or "").strip()
-                merged = (existing + " " + out["text"]).strip()
-                ss[canonical] = merged
-                ss[f"w_{canonical}"] = merged
-                ss.pop(mkey, None)   # reset the recorder
+                # The box's widget is already instantiated this run, and
+                # Streamlit forbids writing its key now. Stash the transcript
+                # and rerun; _kept_text merges it in before the box renders.
+                ss[f"_mic_pending_{canonical}"] = out["text"]
+                ss[f"_mic_reset_{canonical}"] = True
                 store.log_event(_rid(), "dictate", "transcribed",
                                 {"box": canonical,
                                  "chars": len(out["text"])})
@@ -698,6 +702,12 @@ def _kept_text(canonical: str, label: str, mic: bool = True, **kw) -> str:
     using the plain key and does not need to know a widget was involved.
     """
     ss = st.session_state
+    pending = ss.pop(f"_mic_pending_{canonical}", None)
+    if pending:
+        merged = ((ss.get(canonical) or "").strip() + " " + pending).strip()
+        ss[canonical] = merged
+        if f"w_{canonical}" in ss:   # legal here: widget not yet instantiated
+            ss[f"w_{canonical}"] = merged
     val = st.text_area(label, value=ss.get(canonical, ""), key=f"w_{canonical}",
                        **kw)
     ss[canonical] = val
