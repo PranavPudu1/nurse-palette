@@ -641,7 +641,51 @@ _TYPE_NAMES = {t["key"]: t["name"] for t in prompts.SOCRATIC_TYPES}
 MIN_ANSWER = 3          # characters, enough to reject whitespace and stray keys
 
 
-def _kept_text(canonical: str, label: str, **kw) -> str:
+def _mic(canonical: str) -> None:
+    """A dictation popover for a writing box.
+
+    Streamlit cannot overlay an icon inside a text area, so the mic is a
+    compact popover button under the box. The transcription runs inline
+    rather than in a callback so its spinner renders inside the popover.
+    Transcribed text is appended to what is already in the box, never
+    overwriting it, and lands in both the canonical and widget keys.
+    """
+    ss = st.session_state
+    mkey = f"w_mic_{canonical}"
+    with st.popover("🎤 Dictate", help="Speak instead of typing. Record, "
+                                       "then put the words in the box."):
+        audio = st.audio_input("Record, then stop", key=mkey,
+                               label_visibility="collapsed")
+        if audio is not None and st.button("Put it in the box",
+                                           key=f"micgo_{canonical}",
+                                           type="primary"):
+            with st.spinner("Transcribing..."):
+                out = llm.transcribe(audio.getvalue())
+            if out.get("_error"):
+                err = out["_error"]
+                hint = (" The OpenAI account is out of credits."
+                        if "credit" in err or "insufficient_quota" in err
+                        else "")
+                st.error(f"Transcription failed.{hint}\n\n{err}")
+            elif out.get("_mock"):
+                st.error("No API key is configured, so dictation is "
+                         "unavailable in this session.")
+            elif not out.get("text"):
+                st.warning("Nothing was heard in that recording. Try again "
+                           "a little closer to the mic.")
+            else:
+                existing = (ss.get(canonical) or "").strip()
+                merged = (existing + " " + out["text"]).strip()
+                ss[canonical] = merged
+                ss[f"w_{canonical}"] = merged
+                ss.pop(mkey, None)   # reset the recorder
+                store.log_event(_rid(), "dictate", "transcribed",
+                                {"box": canonical,
+                                 "chars": len(out["text"])})
+                st.rerun()
+
+
+def _kept_text(canonical: str, label: str, mic: bool = True, **kw) -> str:
     """A text box whose contents survive the widget being unmounted.
 
     Streamlit garbage-collects widget state as soon as a widget stops being
@@ -657,6 +701,8 @@ def _kept_text(canonical: str, label: str, **kw) -> str:
     val = st.text_area(label, value=ss.get(canonical, ""), key=f"w_{canonical}",
                        **kw)
     ss[canonical] = val
+    if mic:
+        _mic(canonical)
     return val
 
 

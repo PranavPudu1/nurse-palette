@@ -8,6 +8,27 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.9 — 2026-09-17 — guided steps, dictation, sturdier failure modes
+
+- **Numbered guidance everywhere**: Consider + write reveals read -> answer
+  -> write one sub-step at a time behind Done buttons; Score + revise,
+  Sharpen and Test carry big numbered orange section headings (ungated,
+  since comparing and editing is a loop). Test reordered: columns first,
+  edit box second, final pick last; compare columns bordered and taller.
+- **Dictation**: a Dictate mic under every writing box; recording is
+  transcribed (gpt-4o-mini-transcribe) and appended to the box.
+- **Intake questions wait for a Next button** and regenerate when the age
+  changes, so they are always about the child actually described.
+- **"skip" failsafe**: refusals and few-word rules never reach the question
+  generator; Sharpen explains and offers regeneration instead. Longer
+  gibberish gets exactly one nudge question from a hardened prompt.
+- **Loud API-failure banner** replaces silent placeholder fallback; info
+  icons name the model in use.
+
+Deployment: recorded on deploy.
+
+---
+
 ## v0.8 — 2026-09-16 — Min's review round: follow-the-flow fixes
 
 Everything here traces to the Sep 16 review with Min and Eve.

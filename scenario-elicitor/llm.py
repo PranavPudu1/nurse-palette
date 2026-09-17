@@ -247,6 +247,26 @@ def reflect_before(agent: str, does: str, audience: str, scenario: dict) -> dict
                  prompts.REFLECT_SCHEMA, mock)
 
 
+def transcribe(audio_bytes: bytes, filename: str = "speech.wav") -> dict:
+    """Voice-to-text for the dictation mics on the writing boxes.
+
+    Same failure shape as _call so the UI reuses its messaging: a dict with
+    "text", plus "_mock" when no key is configured and "_error" when the
+    API call failed.
+    """
+    if not is_configured():
+        return {"text": "", "_mock": True}
+    try:
+        import io
+        f = io.BytesIO(audio_bytes)
+        f.name = filename
+        resp = _client().audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe", file=f)
+        return {"text": (resp.text or "").strip()}
+    except Exception as exc:
+        return {"text": "", "_error": str(exc)}
+
+
 def reflect_intake(agent: str, does: str, audience: str) -> dict:
     """Socratic questions asked at setup, before any case exists."""
     who = (audience or "the person it acts for").strip()

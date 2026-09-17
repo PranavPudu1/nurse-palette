@@ -81,6 +81,7 @@ with no source is worth knowing about too.
 | Info icons name the model | Every info icon on generated content | Min asked which model is used; the tooltip now says it | Min's review (Sep 16) |
 | The rubric is view-only | Score + revise | Editing was an iRULER carryover for internal tuning; participants see the criteria but cannot change them | Min's review (Sep 16) |
 | The wizard's bottom Back/Continue hides inside a theme | Any theme workspace | Two nav rows read as one; people clicked the wrong Continue. The workspace keeps its own navigation | Min's review (Sep 16) |
+| Every writing box has a dictation mic | The Dictate button under each box | Speaking an answer is easier than typing it, especially for parents on the fly; transcription via OpenAI gpt-4o-mini-transcribe, appended to the box, never overwriting | user direction (Sep 17) |
 
 ## Study mechanics
 
