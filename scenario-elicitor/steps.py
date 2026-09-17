@@ -818,17 +818,10 @@ def _section_step(n: int, text: str) -> None:
 
 
 def _section_num(n: int, label: str) -> None:
-    """A section title carrying the step number it corresponds to, so the
-    checklist at the top of the write screen maps visibly onto the page."""
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:8px;'
-        f'margin-bottom:8px;">'
-        f'<span style="flex:0 0 auto;display:inline-flex;align-items:center;'
-        f'justify-content:center;width:19px;height:19px;border-radius:999px;'
-        f'background:{PRIMARY};color:#fff;font-size:11px;font-weight:700;">'
-        f'{n}</span>'
-        f'<span class="np-section-title" style="margin-bottom:0;">{label}'
-        f'</span></div>', unsafe_allow_html=True)
+    """A numbered section title, identical in size and weight to the big
+    orange headings on Sharpen and Test, so every screen speaks the same
+    visual language (user: match the thick, big headings everywhere)."""
+    _section_step(n, label)
 
 
 def _cw_sub(idx: int) -> int:
