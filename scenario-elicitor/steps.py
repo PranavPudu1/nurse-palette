@@ -761,6 +761,20 @@ def _section_step(n: int, text: str) -> None:
         unsafe_allow_html=True)
 
 
+def _section_num(n: int, label: str) -> None:
+    """A section title carrying the step number it corresponds to, so the
+    checklist at the top of the write screen maps visibly onto the page."""
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:8px;'
+        f'margin-bottom:8px;">'
+        f'<span style="flex:0 0 auto;display:inline-flex;align-items:center;'
+        f'justify-content:center;width:19px;height:19px;border-radius:999px;'
+        f'background:{PRIMARY};color:#fff;font-size:11px;font-weight:700;">'
+        f'{n}</span>'
+        f'<span class="np-section-title" style="margin-bottom:0;">{label}'
+        f'</span></div>', unsafe_allow_html=True)
+
+
 def _cw_sub(idx: int) -> int:
     return int(st.session_state.get(f"sb_cw_{idx}", 0))
 
@@ -1227,7 +1241,7 @@ def _ui_before(idx: int, scenario: dict) -> None:
         ss[f"sb_rqb_{idx}"] = rq.get("questions") or []
         store.log_event(_rid(), "themes", "reflect_before",
                         {"theme": ss.sb_theme, "questions": ss[f"sb_rqb_{idx}"]})
-    section("Before you answer")
+    _section_num(2, "Before you answer")
     st.caption("There is no right answer. What you write here is used when your "
                "rule is checked, so answer all of them before you write.")
     probe = (scenario.get("probe") or "").strip()
@@ -1283,7 +1297,7 @@ def _ui_after(idx: int) -> None:
 def _ui_rule(idx: int, height: int = 200) -> None:
     """The plain rule box, for Consider + write only: the first draft has no
     versions yet, so no dropdown until it is saved as v1 on leaving the stage."""
-    section("Your rule for this theme")
+    _section_num(3, "Your rule for this theme")
     _kept_text(
         f"sb_answer_{idx}", "Your rule", height=height,
         label_visibility="collapsed",
