@@ -687,37 +687,40 @@ def _mic(canonical: str) -> None:
     # key is only legal before st.audio_input instantiates it this run.
     if ss.pop(f"_mic_reset_{canonical}", None):
         ss.pop(mkey, None)
-    with st.popover("🎤 Dictate", help="Speak instead of typing. Record, "
-                                       "then put the words in the box."):
-        audio = st.audio_input("Record, then stop", key=mkey,
-                               label_visibility="collapsed")
-        if audio is not None and st.button("Put it in the box",
-                                           key=f"micgo_{canonical}",
-                                           type="primary"):
-            with st.spinner("Transcribing..."):
-                out = llm.transcribe(audio.getvalue())
-            if out.get("_error"):
-                err = out["_error"]
-                hint = (" The OpenAI account is out of credits."
-                        if "credit" in err or "insufficient_quota" in err
-                        else "")
-                st.error(f"Transcription failed.{hint}\n\n{err}")
-            elif out.get("_mock"):
-                st.error("No API key is configured, so dictation is "
-                         "unavailable in this session.")
-            elif not out.get("text"):
-                st.warning("Nothing was heard in that recording. Try again "
-                           "a little closer to the mic.")
-            else:
-                # The box's widget is already instantiated this run, and
-                # Streamlit forbids writing its key now. Stash the transcript
-                # and rerun; _kept_text merges it in before the box renders.
-                ss[f"_mic_pending_{canonical}"] = out["text"]
-                ss[f"_mic_reset_{canonical}"] = True
-                store.log_event(_rid(), "dictate", "transcribed",
-                                {"box": canonical,
-                                 "chars": len(out["text"])})
-                st.rerun()
+    # Inline, not a popover: the popover closed on every rerun, taking the
+    # visible recording with it, and hid the feature from anyone who did
+    # not click it (user report, Sep 22).
+    audio = st.audio_input("🎤 Dictate instead of typing (optional)",
+                           key=mkey,
+                           help="Record, stop, then put the words in the "
+                                "box. They are added to whatever is typed.")
+    if audio is not None and st.button("Put it in the box",
+                                       key=f"micgo_{canonical}",
+                                       type="primary"):
+        with st.spinner("Transcribing..."):
+            out = llm.transcribe(audio.getvalue())
+        if out.get("_error"):
+            err = out["_error"]
+            hint = (" The OpenAI account is out of credits."
+                    if "credit" in err or "insufficient_quota" in err
+                    else "")
+            st.error(f"Transcription failed.{hint}\n\n{err}")
+        elif out.get("_mock"):
+            st.error("No API key is configured, so dictation is "
+                     "unavailable in this session.")
+        elif not out.get("text"):
+            st.warning("Nothing was heard in that recording. Try again "
+                       "a little closer to the mic.")
+        else:
+            # The box's widget is already instantiated this run, and
+            # Streamlit forbids writing its key now. Stash the transcript
+            # and rerun; _kept_text merges it in before the box renders.
+            ss[f"_mic_pending_{canonical}"] = out["text"]
+            ss[f"_mic_reset_{canonical}"] = True
+            store.log_event(_rid(), "dictate", "transcribed",
+                            {"box": canonical,
+                             "chars": len(out["text"])})
+            st.rerun()
 
 
 def _kept_text(canonical: str, label: str, mic: bool = True, **kw) -> str:
