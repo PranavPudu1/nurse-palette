@@ -33,7 +33,7 @@ Everything here traces to the Sep 22 think-aloud with Winnie and Min.
   long compare threads say they scroll, and generated questions must be
   age-concrete with no abstract perspective-asks or age-hypotheticals.
 
-Deployment: DEPLOY_ID.
+Deployment: `fa4c507c-a9c7-471d-bee6-c96d9e3d400e`.
 
 ---
 
