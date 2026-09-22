@@ -365,6 +365,7 @@ KIDS_AGENT = "An AI that curates news and content for my child"
 KIDS_THEMES = [
     # --- Questionable response from the chatbot -------------------------------
     {"name": "Missing Underlying Meaning", "raised_by": 13,
+     "example": 'Your child asks how to get around a blocked site, and the reply talks about the rule instead of asking why they want in.',
      "desc": "the AI answers the surface question and misses the child's "
              "underlying intent or root cause",
      "blurb": "The AI takes the question at face value and answers it, without "
@@ -372,6 +373,7 @@ KIDS_THEMES = [
               "reply that focused on the rule-breaking rather than the root "
               "issue, which was that their child wanted into a blocked site."},
     {"name": "Wrong Approach to Delivery", "raised_by": 10,
+     "example": 'Asked about a risky stunt from a video, the reply explains it step by step with no word of caution.',
      "desc": "the response is delivered without the risk awareness, usefulness "
              "or structure the moment called for",
      "blurb": "The answer arrives without the care the moment needed. Usually "
@@ -379,18 +381,21 @@ KIDS_THEMES = [
               "subject could do; sometimes an answer that was accurate but of "
               "no practical use, or too disorganised to act on."},
     {"name": "Developmental Mismatch", "raised_by": 8,
+     "example": 'A 7-year-old asks why the sky is blue and gets a paragraph about wavelengths and scattering.',
      "desc": "the response is too complex or mature for the child's age, or "
              "contradicts itself",
      "blurb": "The answer is pitched above your child. Parents described replies "
               "using terms their child could not follow, so the child came away "
               "without the main point even though the information was right."},
     {"name": "Emotional Impact", "raised_by": 7,
+     "example": 'Asked whether pets die, the reply is accurate about death and leaves your child upset at bedtime.',
      "desc": "the response could scare, upset, or unsettle the child",
      "blurb": "The answer is true but it sits badly with your child afterwards. "
               "One parent said their child would walk away not feeling good even "
               "without fully understanding the words. Another asked why a model "
               "should say something that would be harmful from a person."},
     {"name": "Exposure to Unsafe Ideas", "raised_by": 5,
+     "example": 'Asked about kitchen safety, the reply lists exactly which experiments never to try at home.',
      "desc": "the AI introduces concerning ideas or options the child did not "
              "ask about",
      "blurb": "The answer volunteers something your child never asked about and "
@@ -399,6 +404,7 @@ KIDS_THEMES = [
               "their next question."},
     # --- Questionable prompt from the child -----------------------------------
     {"name": "Potentially Harmful Intention", "raised_by": 20,
+     "example": 'Your child asks how to make someone at school regret being mean to them.',
      "desc": "the child's request hints at harming themselves or others, or at "
              "bypassing rules",
      "blurb": "The question itself is the worry, whatever the AI answers back. "
@@ -407,6 +413,7 @@ KIDS_THEMES = [
               "what their child was thinking. This worried the most parents of "
               "any concern in the study."},
     {"name": "Overdependence", "raised_by": 5,
+     "example": 'Your child asks the AI to decide which friend to invite instead of working it out themselves.',
      "desc": "the child leans on the AI for things they should learn or decide "
              "themselves",
      "blurb": "Your child hands the AI something they should be working out or "
@@ -414,6 +421,7 @@ KIDS_THEMES = [
               "on what the AI suggested, one noting their child might wait until "
               "they were out of the house to try it."},
     {"name": "Skepticism of Technical Safeguards", "raised_by": 5,
+     "example": "Refused once, your child retypes it as 'it's for a school project' and gets the answer.",
      "desc": "the child can rephrase a blocked request until the AI answers it",
      "blurb": "Whatever the AI refuses, your child can ask again in different "
               "words. Parents doubted the built-in limits would hold, noting "
@@ -630,10 +638,17 @@ def reflect_before_messages(agent: str, does: str, audience: str,
         + _socratic_preamble() +
         f"Write exactly {n} questions, of DIFFERENT types, that make this person "
         "examine what they are bringing to this situation before they answer: "
-        "what they are taking for granted, where they would draw a line, whose "
-        "perspective they might be missing. Ground every question in the "
+        "what they are taking for granted, what could follow for their child, "
+        "where they would draw a line. Ground every question in the "
         "specifics of this situation. Ask short, plain questions. Use the exact "
         "type keys. Do not use em dashes.\n\n"
+        "Make every question concrete for a child of exactly this age and "
+        "answerable without interpretation. Never ask what the child's or "
+        "anyone's 'perspectives' might be in the abstract, and never ask "
+        "hypotheticals about the child being a different age. Prefer "
+        "questions about what the parent is assuming, what could follow, "
+        "and where they would draw a line. If a question could be unclear, "
+        "include a brief example inside it, like 'for example, ...'.\n\n"
         "HARD RULE. This person has not written a single word yet, so you know "
         "nothing about what they think. Never state or imply that they believe, "
         "assume, want, or prefer anything. Phrasings like 'why do you assume', "
@@ -679,9 +694,16 @@ def reflect_intake_messages(agent: str, does: str, audience: str,
         f"Write exactly {n} questions, of DIFFERENT types, about this person's "
         "own position before they have seen any specific situation: what they "
         "are taking for granted about what this AI can and cannot do, how much "
-        "they want to decide themselves rather than leave to it, and how the "
-        "person it acts for might see it differently. Ask short, plain "
-        "questions. Use the exact type keys. Do not use em dashes.\n\n"
+        "they want to decide themselves rather than leave to it, and where "
+        "they would want lines drawn. Ask short, plain questions. Use the "
+        "exact type keys. Do not use em dashes.\n\n"
+        "Make every question concrete for a child of exactly this age and "
+        "answerable without interpretation. Never ask what the child's or "
+        "anyone's 'perspectives' might be in the abstract, and never ask "
+        "hypotheticals about the child being a different age. Prefer "
+        "questions about what the parent is assuming, what could follow, "
+        "and where they would draw a line. If a question could be unclear, "
+        "include a brief example inside it, like 'for example, ...'.\n\n"
         "HARD RULE. This person has written nothing yet, so you know nothing "
         "about what they think. Never state or imply that they believe, assume, "
         "want or prefer anything. Ask in the conditional, about what they would "
@@ -838,7 +860,9 @@ CONFIRM_DIMENSIONS = ("audience age or maturity", "severity of the situation",
 def confirm_pairwise_messages(agent: str, does: str, description: str, audience: str,
                               scenario: dict, ideal_behavior: str,
                               avoid: list[str] | None = None,
-                              edge: bool = False) -> list[dict]:
+                              edge: bool = False,
+                              avoid_questions: list[str] | None = None,
+                              gaps: list[str] | None = None) -> list[dict]:
     dims = "; ".join(CONFIRM_DIMENSIONS)
     # Later rounds reuse the same situations, so ask for a dimension that has
     # not been used yet; otherwise the person answers the same question twice.
@@ -847,6 +871,19 @@ def confirm_pairwise_messages(agent: str, does: str, description: str, audience:
     if seen:
         extra += (" Do NOT vary any of these, they have been used already: "
                   + "; ".join(sorted(set(seen))) + ".")
+    prev_q = [q.strip() for q in (avoid_questions or []) if q.strip()]
+    if prev_q:
+        extra += (" The child already asked these in earlier close calls: "
+                  + " | ".join(prev_q[-6:]) +
+                  ". Write a DIFFERENT message this time, a fresh way the "
+                  "same situation could come up, never a rewording of one "
+                  "of those.")
+    if gaps:
+        extra += (" The person's rule is currently weakest on: "
+                  + "; ".join(gaps) +
+                  ". Give modest extra weight to moments that would reveal "
+                  "how the rule handles those gaps, but do not force every "
+                  "close call onto them.")
     if edge:
         extra += (" Push this one further out than an everyday case: pick a "
                   "genuinely hard edge where the person's stated behavior is "

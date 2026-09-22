@@ -12,6 +12,8 @@ import json
 
 
 def build_artifact(*, agent: str, frame: dict, audience: str,
+                   case_feedback: list | None = None,
+                   skipped_themes: list | None = None,
                    intake_reflection: list[dict] | None = None,
                    scenarios: list[dict], answers: list[dict],
                    confirm: list[dict] | None = None,
@@ -45,6 +47,8 @@ def build_artifact(*, agent: str, frame: dict, audience: str,
                      "n_tests": a.get("n_tests", 0),
                      "reflection": a.get("reflection", [])}
                     for a in answers],
+        "case_feedback": list(case_feedback or []),
+        "skipped_themes": list(skipped_themes or []),
         "confirmations": [{"theme": c.get("theme", ""),
                            "case_id": c.get("scenario_id"),
                            "title": c.get("title", ""),
@@ -58,7 +62,8 @@ def build_artifact(*, agent: str, frame: dict, audience: str,
                            "round": c.get("round"),
                            "model_choice": c.get("model_choice", ""),
                            "model_reason": c.get("model_reason", ""),
-                           "critique": c.get("critique", ""),
+                           "rule_at_test": c.get("rule_at_test", ""),
+                           "swapped": c.get("swapped"),
                            "agreed": c.get("agreed")}
                           for c in (confirm or [])],
     }

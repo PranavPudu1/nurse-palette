@@ -8,6 +8,35 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.10 — 2026-09-22 — the Winnie round
+
+Everything here traces to the Sep 22 think-aloud with Winnie and Min.
+
+- **Saving never discards box edits**: unsaved rule text auto-becomes a
+  version at Save and the final label follows the box, so the rule of
+  record is always exactly what is on screen (the "rule got cut short"
+  bug, hit twice in the session).
+- **Rounds rotate and vary**: each round anchors on a different one of the
+  theme's cases, the child never repeats an earlier message, and the
+  situations lean gently toward the rubric's weakest criteria. Left/right
+  option sides are coin-flipped and recorded.
+- **Reading is tracked**: the case tabs became a pager; Done reading names
+  the cases not yet opened.
+- **Case thumbs + comments, and a skip**: every example reply takes a
+  thumbs up/down and an optional comment; three thumbs-up offer skipping
+  the topic (recorded, does not count toward the three).
+- **Copy and question quality**: internal EDGE CASE labels removed, theme
+  cards carry a for-example line, the rubric moved above the score bars
+  with clearer level headings, the agent-today reply is labelled as
+  today's behavior, dictation is mentioned where it helps, rounds
+  introduce themselves, reveal buttons moved away from the reason box,
+  long compare threads say they scroll, and generated questions must be
+  age-concrete with no abstract perspective-asks or age-hypotheticals.
+
+Deployment: DEPLOY_ID.
+
+---
+
 ## v0.9 — 2026-09-17 — guided steps, dictation, sturdier failure modes
 
 - **Numbered guidance everywhere**: Consider + write reveals read -> answer

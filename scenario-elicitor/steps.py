@@ -12,6 +12,7 @@ comparisons -> review, submit, download or email the benchmark.
 from __future__ import annotations
 
 import os
+import random
 
 import streamlit as st
 
@@ -226,8 +227,8 @@ def _render_intake_questions() -> None:
     # before anyone had picked one.
     if "sb_rqi" not in ss and not ss.get("sb_intake_ready"):
         st.write("")
-        _instruction("When the age and name above look right, continue. Two "
-                     "short questions about you and your child come next.")
+        _instruction("All set? Two quick questions about you and your "
+                     "child come next.")
         st.button("Next: two quick questions", key="sb_intake_go",
                   type="primary", on_click=_intake_ready)
         return
@@ -330,13 +331,13 @@ def _append_new(items: list[dict]) -> int:
 
 
 def _kind_badge(kind: str) -> str:
-    if kind not in ("edge_case", "surprising"):
-        return ""
-    label = "Non-obvious" if kind == "surprising" else "Edge case"
-    return (f'<span style="display:inline-block;white-space:nowrap;padding:2px 9px;'
-            f'border-radius:999px;background:{ACCENT};color:{FG};font-size:10px;'
-            f'font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">'
-            f'{label}</span>')
+    """Gone from the screen; the kind stays in the data.
+
+    "EDGE CASE" and "NON-OBVIOUS" labelled OUR generation taxonomy, not
+    anything a parent needed (Winnie: "what does that mean?"; user: "should
+    not exist externally facing").
+    """
+    return ""
 
 
 def _situation_card(s: dict) -> str:
@@ -374,7 +375,11 @@ def _render_example_chat(scenario: dict, key: str = "") -> None:
 
     Rendered as chat bubbles rather than a muted card so it reads the way the
     moment would really look, and so it matches the chat on the writing screen.
+    Each reply carries thumbs and an optional comment (Min, Sep 22: "these
+    answers look reasonable, we need to capture that"); three thumbs-up
+    unlock the skip banner on the write screen.
     """
+    ss = st.session_state
     ex = scenario.get("example_exchange") or {}
     if not (ex.get("user_message") or ex.get("ai_response")):
         return
@@ -387,6 +392,30 @@ def _render_example_chat(scenario: dict, key: str = "") -> None:
         with st.chat_message("assistant"):
             st.markdown(f"**The agent today** {provenance.icon('baseline_reply')}  \n"
                         f"{ex['ai_response']}", unsafe_allow_html=True)
+            st.caption("This is what a typical AI replies right now, before "
+                       "any rule from you.")
+    sid = str(scenario.get("id", key or ""))
+    rkey = f"w_sb_crate_{sid}"
+    if rkey not in ss and ss.get(f"sb_crate_{sid}") is not None:
+        ss[rkey] = ss[f"sb_crate_{sid}"]
+    rate = st.feedback("thumbs", key=rkey)
+    # Mirror only real input: an untouched widget reports None and must not
+    # clobber a rating recorded earlier (a thumb cannot be un-clicked anyway).
+    if rate is not None and rate != ss.get(f"sb_crate_{sid}"):
+        ss[f"sb_crate_{sid}"] = rate
+        store.log_event(_rid(), "themes", "case_rate",
+                        {"case_id": sid, "theme": scenario.get("category", ""),
+                         "rate": {1: "up", 0: "down"}.get(rate)})
+    ckey = f"w_sb_ccmt_{sid}"
+    cmt = st.text_input("Comment", key=ckey,
+                        value=ss.get(f"sb_ccmt_{sid}", ""),
+                        label_visibility="collapsed",
+                        placeholder="Anything you liked or disliked about "
+                                    "this reply? (optional)")
+    if cmt != ss.get(f"sb_ccmt_{sid}", ""):
+        ss[f"sb_ccmt_{sid}"] = cmt
+        store.log_event(_rid(), "themes", "case_comment",
+                        {"case_id": sid, "comment": cmt})
 
 
 # --- versions and their chats -------------------------------------------------
@@ -511,6 +540,8 @@ def _ask_version(idx: int, k: int, scenario: dict, msg: str) -> None:
 
 def _render_thread(idx: int, label: str, scenario: dict, height: int = 240) -> None:
     turns = _thread(idx, label, scenario)["turns"]
+    if len(turns) >= 4:
+        st.caption("Scroll inside the panel for the rest of the conversation.")
     with st.container(height=height, border=False):
         if not turns:
             st.caption("No conversation yet. Ask the question below.")
@@ -829,7 +860,16 @@ def _cw_sub(idx: int) -> int:
 
 
 def _cw_done_reading(idx: int) -> None:
-    st.session_state[f"sb_cw_{idx}"] = 1
+    ss = st.session_state
+    total = len(_theme_cases(ss.get("sb_theme") or ""))
+    read = ss.get(f"sb_cread_{idx}") or []
+    unread = [f"Case {i + 1}" for i in range(total) if i not in read]
+    if unread:
+        ss[f"_flash_cw_{idx}"] = ("Open " + " and ".join(unread) + " on the "
+                                  "left first; the rule you write should "
+                                  "hold across all three conversations.")
+        return
+    ss[f"sb_cw_{idx}"] = 1
 
 
 def _cw_done_answering(idx: int) -> None:
@@ -967,7 +1007,7 @@ def _render_rubric_view() -> None:
     their rule (Eve: the rubric would guide what the rule should look like).
     """
     ss = st.session_state
-    with st.expander("View the rubric your rule is checked against"):
+    with st.expander("How rules are judged (the rubric)"):
         st.caption("Your rule is scored on these criteria. Higher levels are "
                    "more specific and more actionable.")
         for c in ss.sb_rubric:
@@ -1041,6 +1081,51 @@ def _ensure_theme_cases(theme: str) -> list[dict]:
     return have
 
 
+def _all_cases_up(theme: str) -> bool:
+    """All of the theme's cases rated thumbs-up (unlocks the skip offer)."""
+    ss = st.session_state
+    cases = _theme_cases(theme)
+    return bool(cases) and all(
+        ss.get(f"sb_crate_{str(c.get('id'))}") == 1 for c in cases)
+
+
+def _skip_theme(theme: str) -> None:
+    """Record 'the AI already handles this well' and return to the menu.
+
+    Min (Sep 22): three thumbs-up may mean no rule is needed. A skipped
+    theme does NOT count toward the required three (user decision), so the
+    person picks another topic; the ratings and comments are the data.
+    """
+    ss = st.session_state
+    cases = _theme_cases(theme)
+    skipped = ss.setdefault("sb_themes_skipped", [])
+    if theme not in skipped:
+        skipped.append(theme)
+    store.log_event(_rid(), "themes", "theme_skipped", {
+        "theme": theme,
+        "ratings": {str(c.get("id")): st.session_state.get(
+            f"sb_crate_{str(c.get('id'))}") for c in cases},
+        "comments": {str(c.get("id")): (st.session_state.get(
+            f"sb_ccmt_{str(c.get('id'))}") or "") for c in cases}})
+    _close_theme()
+
+
+def _case_feedback() -> list[dict]:
+    """Every rated or commented case, for the export."""
+    ss = st.session_state
+    out = []
+    for c in (ss.sb_scenarios or []):
+        sid = str(c.get("id"))
+        rate = ss.get(f"sb_crate_{sid}")
+        cmt = (ss.get(f"sb_ccmt_{sid}") or "").strip()
+        if rate is not None or cmt:
+            out.append({"case_id": sid, "theme": c.get("category", ""),
+                        "title": c.get("title", ""),
+                        "thumbs": {1: "up", 0: "down"}.get(rate),
+                        "comment": cmt})
+    return out
+
+
 def _open_theme(theme: str) -> None:
     ss = st.session_state
     ss.sb_theme = theme
@@ -1079,7 +1164,8 @@ def _render_theme_menu() -> None:
         cols = st.columns(2, gap="medium")
         for col, t in zip(cols, themes[row_start:row_start + 2]):
             with col:
-                _theme_card(t, t["name"] in done)
+                _theme_card(t, t["name"] in done,
+                            t["name"] in (ss.get("sb_themes_skipped") or []))
 
     st.write("")
     if len(done) >= n_want:
@@ -1089,7 +1175,7 @@ def _render_theme_menu() -> None:
         st.caption(f"Pick {n_want - len(done)} more to continue.")
 
 
-def _theme_card(t: dict, is_done: bool) -> None:
+def _theme_card(t: dict, is_done: bool, is_skipped: bool = False) -> None:
     """One theme, with what it means. The blurb is not decoration.
 
     Min, on seeing only the names: "they will not know what missing the real
@@ -1097,15 +1183,20 @@ def _theme_card(t: dict, is_done: bool) -> None:
     """
     name = t["name"]
     tick = ('<span style="color:#2E7D4F;font-weight:700;"> done</span>'
-            if is_done else "")
+            if is_done else
+            (f'<span style="color:{MUTED_FG};font-weight:600;"> skipped'
+             f'</span>' if is_skipped else ""))
     n = t.get("raised_by")
     count = (f'<div class="np-muted" style="margin-top:6px;font-size:11.5px;">'
              f'raised by {n} of the 24 parents interviewed</div>' if n else "")
+    ex = (t.get("example") or "").strip()
+    ex_html = (f'<div class="np-muted" style="margin-top:6px;font-style:italic;">'
+               f'For example: {ex}</div>' if ex else "")
     st.markdown(
         f'<div class="np-card" style="margin-bottom:6px;min-height:150px;">'
         f'<div style="font-weight:700;color:{FG};">{name}{tick}</div>'
         f'<div class="np-sub" style="margin-top:4px;">{t["blurb"]}</div>'
-        f'{count}</div>',
+        f'{ex_html}{count}</div>',
         unsafe_allow_html=True)
     if is_done:
         ans = _theme_answer(name)
@@ -1113,6 +1204,12 @@ def _theme_card(t: dict, is_done: bool) -> None:
             st.write((ans or {}).get("ideal_behavior", ""))
         st.button("Revise this rule", key=f"sb_open_{name}", type="secondary",
                   use_container_width=True, on_click=_open_theme, args=(name,))
+    elif is_skipped:
+        st.caption("You rated the AI\'s replies good here, so no rule is "
+                   "needed. You can still write one.")
+        st.button("Write a rule anyway", key=f"sb_open_{name}",
+                  type="secondary", use_container_width=True,
+                  on_click=_open_theme, args=(name,))
     else:
         st.button("Write a rule for this", key=f"sb_open_{name}", type="primary",
                   use_container_width=True, on_click=_open_theme, args=(name,))
@@ -1189,24 +1286,22 @@ def _render_scores(fb: dict | None, rubric: list[dict], idx: int,
             f'{provenance.icon("rubric")}</div>', unsafe_allow_html=True)
     else:
         st.caption("Write a rule and press Check to see how specific it is.")
+    # Above the bars, not buried at the bottom: Winnie never noticed it there
+    # ("if you need people to read the rubric, you should move it up").
+    _render_rubric_view()
     st.markdown(
         "".join(_render_score_bar(c["name"], levels.get(c["name"]), c["weight"])
                 for c in rubric), unsafe_allow_html=True)
 
     if fb:
         for c in (fb.get("criteria") or []):
-            with st.expander(f"{c.get('name', '')}: what would move this up"):
-                st.markdown(f"**Why level {c.get('level')}**")
+            lvl = int(c.get("level", 1) or 1)
+            with st.expander(f"{c.get('name', '')}: you are at level "
+                             f"{lvl} of 4"):
+                st.markdown(f"**Why level {lvl}**")
                 st.write(c.get("why", ""))
-                st.markdown(f"**What level {min(4, int(c.get('level', 1)) + 1)} "
-                            f"would take**")
+                st.markdown(f"**What level {min(4, lvl + 1)} would take**")
                 st.write(c.get("why_not_higher", ""))
-
-    # Adjusting the rubric lives with the rubric. It used to sit full width at
-    # the bottom of the page and was silently dropped when the workspace was
-    # split into layouts; anchoring it here means every layout gets it and none
-    # can lose it again. Collapsed, it costs one line.
-    _render_rubric_view()
 
     # The nudge that replaced the AI revision: their own words, pointed at the
     # box beside this column, with no generated text to accept.
@@ -1240,6 +1335,8 @@ def _save_theme_rule(theme: str, cases: list[dict]) -> None:
     if theme not in done:
         done.append(theme)
     ss.sb_themes_done = done
+    if theme in (ss.get("sb_themes_skipped") or []):
+        ss.sb_themes_skipped.remove(theme)   # they wrote a rule anyway
     ss.sb_tphase = "test"
     ss.sb_tround = 1
     ss.sb_tcidx = 0
@@ -1259,7 +1356,7 @@ def _save_theme_rule(theme: str, cases: list[dict]) -> None:
 #                         reload versions, and mark ONE as final before saving
 
 
-def _ui_cases(cases: list[dict]) -> None:
+def _ui_cases(cases: list[dict], idx: int = 0) -> None:
     """The theme's cases as conversations, one per tab.
 
     No fixed-height container. Each case used to sit in one, which put a second
@@ -1269,16 +1366,26 @@ def _ui_cases(cases: list[dict]) -> None:
     short enough to fit.
 
     """
+    ss = st.session_state
     st.markdown(f'<div class="np-section-title">The conversations'
                 f'{provenance.icon("case")}</div>', unsafe_allow_html=True)
     if not cases:
         st.info("No cases for this theme yet.")
         return
-    tabs = st.tabs([f"Case {i + 1}" for i in range(len(cases))])
-    for tab, sc in zip(tabs, cases):
-        with tab:
-            st.markdown(_situation_card(sc), unsafe_allow_html=True)
-            _render_example_chat(sc)
+    # A segmented pager instead of tabs: st.tabs cannot report which tab is
+    # open, and Winnie would have pressed Done reading after seeing only
+    # Case 1. Every visit lands in sb_cread_{idx}, which gates Done reading.
+    labels = [f"Case {i + 1}" for i in range(len(cases))]
+    pick = st.segmented_control("Case", labels, key=f"w_sb_case_{idx}",
+                                default=labels[0],
+                                label_visibility="collapsed")
+    k = labels.index(pick) if pick in labels else 0
+    read = ss.setdefault(f"sb_cread_{idx}", [])
+    if k not in read:
+        read.append(k)
+    sc = cases[k]
+    st.markdown(_situation_card(sc), unsafe_allow_html=True)
+    _render_example_chat(sc)
 
 
 def _ui_before(idx: int, scenario: dict) -> None:
@@ -1332,14 +1439,19 @@ def _ui_after(idx: int) -> None:
                    "questions.")
     src = (ss.get(f"sb_rqa_src_{idx}") or "").strip()
     live = _live(f"sb_answer_{idx}").strip()
-    if src and live and src != live:
+    stale = bool(src and live and src != live)
+    if stale:
         st.caption("Your rule changed since these questions were made. "
                    "Regenerate to match what it says now.")
-    st.button("New questions from my current rule", key=f"sb_regen_{idx}",
-              type="secondary",
-              help="Rereads the rule as it stands and asks fresh questions "
-                   "about it. Your current answers are kept in the study log.",
-              on_click=_regen_questions_click, args=(idx,))
+    # Only offered when it would do something: always showing it made the
+    # facilitator say "ignore that button" mid-session.
+    if stale or len(qs) < prompts.N_REFLECT_AFTER:
+        st.button("New questions from my current rule",
+                  key=f"sb_regen_{idx}", type="secondary",
+                  help="Rereads the rule as it stands and asks fresh "
+                       "questions about it. Your current answers are kept "
+                       "in the study log.",
+                  on_click=_regen_questions_click, args=(idx,))
     _show_flash(f"_flash_regen_{idx}")
 
 
@@ -1579,7 +1691,16 @@ def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
 
 
 def _save_final(theme: str, cases: list[dict], idx: int) -> None:
-    """The marked version becomes the rule of record before saving."""
+    """The words in the box are the rule of record.
+
+    This used to load the dropdown-marked version over the box, silently
+    discarding edits that were never saved as a version; Winnie lost her
+    rule twice that way ("your rule got cut short"). Version tracking is
+    now consistent screen to screen: unsaved box text auto-becomes a
+    version (same policy as _leave_consider and _theme_after_reveal), the
+    final label follows whatever the box says, and the rounds (_theme_rule
+    reads the box first) therefore test exactly what was saved.
+    """
     ss = st.session_state
     sync_widget_mirrors()
     missing = _unanswered(idx, "b")
@@ -1587,6 +1708,17 @@ def _save_final(theme: str, cases: list[dict], idx: int) -> None:
         ss[f"_flash_save_{idx}"] = _needs(len(missing),
                                           len(_question_slots(idx, "b")))
         return
+    live = (ss.get(f"sb_answer_{idx}") or "").strip()
+    if live:
+        match = next((f"v{n + 1}" for n, v in enumerate(_vers(idx))
+                      if v.strip() == live), None)
+        if match is None:
+            match = _save_version(idx, live)
+            st.toast(f"Your latest edits were saved as {match} and used as "
+                     "your final rule.")
+        if ss.get(f"sb_final_{idx}") != match:
+            ss[f"sb_final_{idx}"] = match
+            ss[f"w_sb_final_{idx}"] = match
     label = ss.get(f"sb_final_{idx}", "")
     rule = _vrule(idx, label).strip()
     if not rule:
@@ -1639,15 +1771,25 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
         return
     left, right = st.columns(_C_SPLIT[cur], gap="medium")
     with left:
-        _ui_cases(cases)
+        _ui_cases(cases, idx)
     with right:
         _render_stage_rail(idx)
         if cur == 0:
             sub = _cw_sub(idx)
             _cw_header(sub)
+            if (theme not in (ss.get("sb_themes_done") or [])
+                    and _all_cases_up(theme)):
+                st.info("You rated all three replies good. If the AI "
+                        "already handles this well, you can skip writing a "
+                        "rule for this topic and pick another instead. "
+                        "Skipped topics do not count toward your three.")
+                st.button("Skip this topic", key=f"sb_skip_{idx}",
+                          type="secondary", on_click=_skip_theme,
+                          args=(theme,))
             if sub == 0:
                 st.button("Done reading", key=f"sb_cwr_{idx}", type="primary",
                           on_click=_cw_done_reading, args=(idx,))
+                _show_flash(f"_flash_cw_{idx}")
             elif sub == 1:
                 _ui_before(idx, scenario)
                 st.button("Done answering", key=f"sb_cwa_{idx}",
@@ -1659,6 +1801,10 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
                 _instruction("Use your answers above: say what the AI "
                              "should do, what it should not do, and how to "
                              "handle the hard part.")
+                st.caption("Don't overthink the first version: the next "
+                           "step scores it and shows exactly what would "
+                           "make it stronger. Type it, or use the Dictate "
+                           "button to speak it.")
                 _ui_rule(idx, height=150)
         elif cur == 1:
             _instruction("Workshop your rule: check it against the rubric, "
@@ -1827,7 +1973,15 @@ def _theme_rule(theme: str) -> str:
 
 
 def _theme_cmps(theme: str, rnd: int) -> list[dict]:
-    """This theme's comparisons for one round, generated once and cached."""
+    """This theme's comparisons for one round, generated once and cached.
+
+    Round r anchors on the theme's case r (rotating), not always case 1:
+    Winnie got the same polar-bear question every round because only
+    cases[0] ever reached the generator. The child's earlier messages are
+    passed so each close call asks a fresh way, and the rubric's weakest
+    criteria steer the situations, with modest weight, toward what the
+    rule does not yet specify.
+    """
     ss = st.session_state
     key = _theme_key(theme, rnd)
     if key in ss.sb_cmp:
@@ -1835,27 +1989,46 @@ def _theme_cmps(theme: str, rnd: int) -> list[dict]:
     ans = _theme_answer(theme)
     if not ans:
         return []
+    cases = _theme_cases(theme)
+    anchor = cases[(rnd - 1) % len(cases)] if cases else ans
+    idx = _theme_index(theme)
+    fb = ss.get(f"sb_fb_{idx}") or {}
+    gaps = [f"{(c.get('name') or '').strip()} ({(c.get('why') or '')[:120]})"
+            for c in (fb.get("criteria") or [])
+            if int(c.get("level", 4) or 4) <= 2][:3]
     used = [c.get("dimension", "") for r in ss.sb_cmp.values() for c in r]
+    prior_msgs = [c.get("user_message", "") for r in ss.sb_cmp.values()
+                  for c in r if c.get("theme") == theme]
     out = []
     with st.spinner("Building a couple of close calls..."):
         for k in range(N_THEME_ROUND):
             data = llm.confirm_pairwise(ss.sb_agent, _does(), "",
-                                        ss.sb_audience, ans, _theme_rule(theme),
-                                        avoid=used, edge=(rnd > 1))
+                                        ss.sb_audience, anchor,
+                                        _theme_rule(theme),
+                                        avoid=used, edge=(rnd > 1),
+                                        avoid_questions=prior_msgs,
+                                        gaps=gaps)
             opts = list(data.get("options") or [])
             while len(opts) < 2:
                 opts.append({"label": f"Option {len(opts) + 1}",
                              "text": "(no option)"})
+            # The model's option order used to BE the displayed left/right;
+            # Winnie noticed every model-preferred reply sat on the left.
+            swapped = random.random() < 0.5
+            if swapped:
+                opts = [opts[1], opts[0]]
             dim = (data.get("dimension") or "").strip()
             used.append(dim)
+            prior_msgs.append((data.get("user_message") or "").strip())
             out.append({
                 "id": f"{theme[:12]}r{rnd}i{k}", "round": rnd, "theme": theme,
                 "level": "theme",
-                "scenario_id": ans.get("scenario_id"),
-                "title": ans.get("title", ""), "situation": ans.get("situation", ""),
+                "scenario_id": anchor.get("id", ans.get("scenario_id")),
+                "title": anchor.get("title", ans.get("title", "")),
+                "situation": anchor.get("situation", ans.get("situation", "")),
                 "instance": (data.get("instance") or "").strip(),
                 "user_message": (data.get("user_message") or "").strip(),
-                "dimension": dim, "options": opts[:2],
+                "dimension": dim, "options": opts[:2], "swapped": swapped,
                 "_mock": data.get("_mock"), "_error": data.get("_error")})
     ss.sb_cmp[key] = out
     return out
@@ -1995,6 +2168,9 @@ def _render_theme_test() -> None:
 
     header(theme, f"Round {rnd} of {_LAST_ROUND}. Close call {i + 1} of "
                   f"{len(cmps)}. {_THEME_ROUND_INTRO[rnd]}")
+    if rnd == 1 and i == 0:
+        _instruction("Three quick rounds of close calls. Each one checks "
+                     "whether the rule you wrote chooses the way you would.")
     _render_rule_reminder(idx)
     _section_step(1, "Read the moment and the two replies"
                      if not revealed else "The moment and the two replies")
@@ -2038,13 +2214,20 @@ def _render_theme_test() -> None:
                    "the next comparisons use what you write here.")
         _kept_text(f"sb_answer_{idx}", "Your rule", height=150,
                    label_visibility="collapsed")
-        st.button("Save and continue", type="primary",
-                  key=f"sb_tafter_{cmp['id']}", on_click=_theme_after_reveal,
-                  args=(cmp, i))
+        st.divider()
+        _, bcol = st.columns([2, 1])
+        bcol.button("Save and continue", type="primary",
+                    use_container_width=True,
+                    key=f"sb_tafter_{cmp['id']}",
+                    on_click=_theme_after_reveal, args=(cmp, i))
     else:
-        st.button("Next", type="primary", key=f"sb_tafter_{cmp['id']}",
-                  on_click=_theme_after_reveal, args=(cmp, i))
-        st.caption("This round is scored. Nothing you do here changes the rule.")
+        st.caption("This round is scored. Nothing you do here changes the "
+                   "rule.")
+        st.divider()
+        _, bcol = st.columns([2, 1])
+        bcol.button("Next", type="primary", use_container_width=True,
+                    key=f"sb_tafter_{cmp['id']}",
+                    on_click=_theme_after_reveal, args=(cmp, i))
 
 
 def _render_rule_reminder(idx: int, title: str = "Your rule") -> None:
@@ -2213,6 +2396,8 @@ def render_output() -> None:
         audience=ss.sb_audience, intake_reflection=_intake_answers(),
         scenarios=ss.sb_scenarios, answers=ss.sb_answers,
         confirm=ss.sb_confirm, rubric=ss.sb_rubric,
+        case_feedback=_case_feedback(),
+        skipped_themes=list(ss.get("sb_themes_skipped") or []),
         submitted=bool(ss.get("sb_submitted")))
 
     header("Your preferences",

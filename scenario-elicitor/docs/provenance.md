@@ -82,6 +82,16 @@ with no source is worth knowing about too.
 | The rubric is view-only | Score + revise | Editing was an iRULER carryover for internal tuning; participants see the criteria but cannot change them | Min's review (Sep 16) |
 | The wizard's bottom Back/Continue hides inside a theme | Any theme workspace | Two nav rows read as one; people clicked the wrong Continue. The workspace keeps its own navigation | Min's review (Sep 16) |
 | Every writing box has a dictation mic | The Dictate button under each box | Speaking an answer is easier than typing it, especially for parents on the fly; transcription via OpenAI gpt-4o-mini-transcribe, appended to the box, never overwriting | user direction (Sep 17) |
+| Saving never discards box edits | Save this rule and test it | Unsaved edits silently reverted to the marked version, twice losing a tester's rule; the box text now auto-saves as a version and the final label follows it | Winnie think-aloud (Sep 22) |
+| Round comparisons rotate cases and vary the child's message | The theme rounds | Every round reused case 1's exact question; rounds now anchor on a different case each round and never repeat a message, steered gently toward the rubric's weakest criteria | Winnie think-aloud (Sep 22) |
+| Left/right sides are shuffled | The theme rounds | The model's option order was displayed verbatim, so its preferred reply tended to sit on one side; a coin flip now decides, recorded per comparison | Winnie think-aloud (Sep 22) |
+| Done reading requires opening all three cases | Consider + write | A tester would have continued after case 1; the case tabs became a tracked pager and the gate names the unopened cases | Winnie think-aloud (Sep 22) |
+| Thumbs and an optional comment on every case reply | Under each example reply | Min: reasonable-looking baseline replies are data we were not capturing | Min (Sep 22) |
+| Three thumbs-up offer a skip that does not count | The write screen banner | If the AI already handles a topic well no rule is forced, but a skipped topic does not count toward the three, so three real rules still come out | Min (Sep 22) |
+| Internal case labels are gone from the screen | Nowhere, by design | EDGE CASE and NON-OBVIOUS labelled our generation taxonomy, not anything a parent needed; the kind stays in the data | Winnie think-aloud (Sep 22) |
+| Theme cards carry a concrete example | The topic menu | Descriptions alone took too long to decode; one for-example line per card | Winnie think-aloud (Sep 22) |
+| The rubric sits above the score bars | Score + revise | It was ignored at the bottom; anyone meant to learn from it has to at least see it | Winnie think-aloud (Sep 22) |
+| Reflection questions must be concrete for the child's age | Behind every generated question | Abstract perspective-questions and age-hypotheticals confused a tester; assumptions and consequences questions helped her | Winnie think-aloud (Sep 22) |
 
 ## Study mechanics
 

@@ -70,6 +70,10 @@ for n in range(wizard.N_THEMES):
     # revealed sub-steps: read -> answer -> write; Next only at the end
     assert not [b for b in at.button if b.label.startswith("Next:")], \
         "Next visible before the sub-steps finished"
+    click(at, "Done reading")
+    assert (f"sb_cw_{idx}" not in ss) or ss[f"sb_cw_{idx}"] == 0, \
+        "Done reading advanced before all cases were opened"
+    at.session_state[f"sb_cread_{idx}"] = [0, 1, 2]
     assert click(at, "Done reading"), "Done reading missing"
     click(at, "Done answering")
     assert ss[f"sb_cw_{idx}"] == 1, "advanced with questions unanswered"
@@ -92,6 +96,10 @@ for n in range(wizard.N_THEMES):
             assert click(at, f"Start round {rnd}"), f"start theme round {rnd}"
         assert not at.exception, at.exception
         cmps = ss["sb_cmp"][f"{theme}:{rnd}"]
+        tcases = [s for s in ss["sb_scenarios"] if s.get("category") == theme]
+        assert cmps[0]["scenario_id"] == tcases[(rnd - 1) % len(tcases)]["id"], \
+            "round anchors rotate across the theme's cases"
+        assert "swapped" in cmps[0], "left/right shuffle recorded"
         for _ in range(len(cmps)):
             j = ss["sb_tcidx"]
             body = md(at)

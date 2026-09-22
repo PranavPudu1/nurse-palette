@@ -302,7 +302,9 @@ def reflect_after(agent: str, does: str, audience: str, scenario: dict,
 
 def confirm_pairwise(agent: str, does: str, description: str, audience: str,
                      scenario: dict, ideal_behavior: str,
-                     avoid: list[str] | None = None, edge: bool = False) -> dict:
+                     avoid: list[str] | None = None, edge: bool = False,
+                     avoid_questions: list[str] | None = None,
+                     gaps: list[str] | None = None) -> dict:
     mock = {
         "dimension": "severity of the situation",
         "instance": (f"A specific, near yes-or-no instance of: "
@@ -318,7 +320,9 @@ def confirm_pairwise(agent: str, does: str, description: str, audience: str,
     return _call(
         prompts.confirm_pairwise_messages(agent, does, description, audience,
                                           scenario, ideal_behavior,
-                                          avoid=avoid, edge=edge),
+                                          avoid=avoid, edge=edge,
+                                          avoid_questions=avoid_questions,
+                                          gaps=gaps),
         prompts.CONFIRM_SCHEMA, mock, temperature=0.7)
 
 

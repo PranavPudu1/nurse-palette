@@ -89,6 +89,7 @@ def init() -> None:
     ss.setdefault("sb_tphase", "write")      # "write" | "test"
     ss.setdefault("sb_tround", 1)            # round within a theme's testing loop
     ss.setdefault("sb_themes_done", [])      # theme names with a saved rule
+    ss.setdefault("sb_themes_skipped", [])   # rated all-good, no rule needed
     ss.setdefault("sb_confirm", [])         # every pick, across all rounds
     ss.setdefault("sb_confirm_cache", {})   # legacy, kept so old snapshots load
     ss.setdefault("sb_cmp", {})             # "theme:round" -> [comparison, ...]

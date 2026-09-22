@@ -6,6 +6,7 @@ sys.path.insert(0, APP)
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="lay_")
 from streamlit.testing.v1 import AppTest
 import llm, steps as S
+import prompts as P
 llm.is_configured = lambda: False
 
 DRAFT = "Summarize it calmly for my 10-year-old and never repeat graphic detail."
@@ -67,7 +68,13 @@ idx = ss["sb_idx"]
 check(not any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
       "no rule box before the read sub-step is done")
 check(next_stage(at) == "none", "no Next before the sub-steps finish")
-check(click(at, "Done reading"), "Done reading advances")
+click(at, "Done reading")
+check(sget(ss, f"sb_cw_{idx}", 0) == 0,
+      "Done reading blocked until all cases were opened")
+ss[f"sb_cread_{idx}"] = [0, 1, 2]
+check(click(at, "Done reading"), "Done reading clickable")
+check(sget(ss, f"sb_cw_{idx}") == 1,
+      "Done reading advances once all cases were opened")
 check(click(at, "Done answering"), "Done answering exists")
 check(ss[f"sb_cw_{idx}"] == 1, "answering gate holds while questions blank")
 for w in [w for w in at.text_area
@@ -135,17 +142,51 @@ check(len(turns) >= 2, "v1's thread persisted after switching the column away")
 save = [b for b in at.button if b.label == "Save this rule and test it"]
 check(bool(save) and not save[0].disabled,
       "save enabled once a final version is marked (defaults to newest)")
+# Winnie's cut-short bug: box edits never saved as a version must survive.
+EDIT3 = DRAFT + " Ask me on close calls. Also tell me afterwards."
+at.text_area(key=f"w_sb_answer_{idx}").set_value(EDIT3).run()
 click(at, "Save this rule and test it")
 check(ss["sb_tphase"] == "test", "saving leads into the theme rounds")
+check(len(sget(ss, f"sb_vers_{idx}") or []) == 3,
+      "the unsaved box edit auto-saved as v3")
 ans = ss["sb_answers"][0]
-check(ans["ideal_behavior"] == DRAFT + " Ask me on close calls.",
-      "the marked version (v2) is what saved")
+check(ans["ideal_behavior"] == EDIT3,
+      "what saved is exactly the box text, never a reverted version")
+check(ans.get("final_version") == "v3", "the final label follows the box")
 check(ans["rule_versions"] == [{"label": "v1", "rule": DRAFT},
                                {"label": "v2",
-                                "rule": DRAFT + " Ask me on close calls."}],
+                                "rule": DRAFT + " Ask me on close calls."},
+                               {"label": "v3", "rule": EDIT3}],
       "the export carries the version trajectory")
 check(ans.get("final_version", "") != "", "the final version label was recorded")
 check(len(ans["reflection"]) >= 1, "reflections captured")
+
+print("=== all-thumbs-up unlocks the skip flow ===")
+# Mid-rounds there is no back button by design; leave via state like a
+# resumed session would.
+ss["sb_theme"] = None
+ss["sb_tphase"] = "write"
+at.run()
+theme2 = [t["name"] for t in P.KIDS_THEMES
+          if t["name"] not in ss["sb_themes_done"]][0]
+for b in at.button:
+    if b.key == f"sb_open_{theme2}":
+        b.click().run(); break
+check(ss["sb_theme"] == theme2, "second theme opened")
+t2cases = [s for s in ss["sb_scenarios"] if s.get("category") == theme2]
+check(len(t2cases) == 3, "second theme generated its cases")
+for c in t2cases:
+    ss[f"sb_crate_{c['id']}"] = 1
+at.run()
+check(any(b.label == "Skip this topic" for b in at.button),
+      "three thumbs-up surface the skip offer")
+click(at, "Skip this topic")
+check(ss["sb_theme"] is None, "skip returns to the menu")
+check(theme2 in ss["sb_themes_skipped"], "the skip was recorded")
+check(theme2 not in ss["sb_themes_done"],
+      "a skipped theme does not count toward the three")
+check(any(b.label == "Write a rule anyway" for b in at.button),
+      "the menu card shows the skipped state")
 
 print("=== resume returns to the same stage ===")
 code = ss["resp_code"]

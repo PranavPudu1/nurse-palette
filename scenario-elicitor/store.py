@@ -173,7 +173,7 @@ _SNAPSHOT_KEYS = {
     "sb_step", "sb_step_key", "sb_condition",
     "sb_theme", "sb_tphase", "sb_themes_done", "sb_tcidx", "sb_tround",
     "resp_child_age", "sb_age_input", "sb_name_input",
-    "sb_rqi", "sb_rqi_age", "sb_intake_ready",
+    "sb_rqi", "sb_rqi_age", "sb_intake_ready", "sb_themes_skipped",
     "sb_agent", "sb_frame", "sb_audience", "sb_scenarios",
     "sb_next_id", "sb_idx", "sb_answers", "sb_confirm",
     "sb_confirm_cache", "sb_rubric", "sb_submitted",
@@ -181,7 +181,7 @@ _SNAPSHOT_KEYS = {
 }
 _SNAPSHOT_PREFIXES = ("sb_answer_", "sb_first_", "sb_fb_", "sb_lastfb_",
                       "sb_stage_", "sb_final_",
-                      "sb_nrev_", "sb_cnote_", "sb_cw_",
+                      "sb_nrev_", "sb_cnote_", "sb_cw_", "sb_cread_", "sb_crate_", "sb_ccmt_",
                       "sb_chat_", "sb_pick_", "sb_vq_", "sb_vcmp_",
                       # first-class versions and their per-version threads
                       "sb_vers_", "sb_vsel_", "sb_chats_", "sb_cmpv_",
