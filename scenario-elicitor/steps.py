@@ -395,10 +395,14 @@ def _render_example_chat(scenario: dict, key: str = "") -> None:
             st.caption("This is what a typical AI replies right now, before "
                        "any rule from you.")
     sid = str(scenario.get("id", key or ""))
+    st.markdown('<div class="np-q" style="margin-top:10px;">Was this reply '
+                'okay for your child?</div>', unsafe_allow_html=True)
     rkey = f"w_sb_crate_{sid}"
     if rkey not in ss and ss.get(f"sb_crate_{sid}") is not None:
         ss[rkey] = ss[f"sb_crate_{sid}"]
-    rate = st.feedback("thumbs", key=rkey)
+    fcol, ccol = st.columns([1, 2.6], gap="small")
+    with fcol:
+        rate = st.feedback("thumbs", key=rkey)
     # Mirror only real input: an untouched widget reports None and must not
     # clobber a rating recorded earlier (a thumb cannot be un-clicked anyway).
     if rate is not None and rate != ss.get(f"sb_crate_{sid}"):
@@ -407,11 +411,12 @@ def _render_example_chat(scenario: dict, key: str = "") -> None:
                         {"case_id": sid, "theme": scenario.get("category", ""),
                          "rate": {1: "up", 0: "down"}.get(rate)})
     ckey = f"w_sb_ccmt_{sid}"
-    cmt = st.text_input("Comment", key=ckey,
-                        value=ss.get(f"sb_ccmt_{sid}", ""),
-                        label_visibility="collapsed",
-                        placeholder="Anything you liked or disliked about "
-                                    "this reply? (optional)")
+    with ccol:
+        cmt = st.text_input("Comment", key=ckey,
+                            value=ss.get(f"sb_ccmt_{sid}", ""),
+                            label_visibility="collapsed",
+                            placeholder="Anything you liked or disliked? "
+                                        "(optional)")
     if cmt != ss.get(f"sb_ccmt_{sid}", ""):
         ss[f"sb_ccmt_{sid}"] = cmt
         store.log_event(_rid(), "themes", "case_comment",
@@ -1996,21 +2001,27 @@ def _theme_cmps(theme: str, rnd: int) -> list[dict]:
     anchor = cases[(rnd - 1) % len(cases)] if cases else ans
     idx = _theme_index(theme)
     fb = ss.get(f"sb_fb_{idx}") or {}
-    gaps = [f"{(c.get('name') or '').strip()} ({(c.get('why') or '')[:120]})"
-            for c in (fb.get("criteria") or [])
-            if int(c.get("level", 4) or 4) <= 2][:3]
+    # Rubric-gap steer by round: gentle in round 1, one of round 2's two
+    # close calls is REQUIRED to target a gap (that is the round where the
+    # rule can still change), and round 3 ignores the rubric entirely so
+    # the scored round stays an unbiased sample (user direction, Sep 22).
+    gaps = [] if rnd >= 3 else [
+        f"{(c.get('name') or '').strip()} ({(c.get('why') or '')[:120]})"
+        for c in (fb.get("criteria") or [])
+        if int(c.get("level", 4) or 4) <= 2][:3]
     used = [c.get("dimension", "") for r in ss.sb_cmp.values() for c in r]
     prior_msgs = [c.get("user_message", "") for r in ss.sb_cmp.values()
                   for c in r if c.get("theme") == theme]
     out = []
     with st.spinner("Building a couple of close calls..."):
         for k in range(N_THEME_ROUND):
+            force = bool(gaps) and rnd == 2 and k == 0
             data = llm.confirm_pairwise(ss.sb_agent, _does(), "",
                                         ss.sb_audience, anchor,
                                         _theme_rule(theme),
                                         avoid=used, edge=(rnd > 1),
                                         avoid_questions=prior_msgs,
-                                        gaps=gaps)
+                                        gaps=gaps, force_gap=force)
             opts = list(data.get("options") or [])
             while len(opts) < 2:
                 opts.append({"label": f"Option {len(opts) + 1}",
@@ -2032,6 +2043,7 @@ def _theme_cmps(theme: str, rnd: int) -> list[dict]:
                 "instance": (data.get("instance") or "").strip(),
                 "user_message": (data.get("user_message") or "").strip(),
                 "dimension": dim, "options": opts[:2], "swapped": swapped,
+                "gap_targeted": force,
                 "_mock": data.get("_mock"), "_error": data.get("_error")})
     ss.sb_cmp[key] = out
     return out

@@ -304,7 +304,8 @@ def confirm_pairwise(agent: str, does: str, description: str, audience: str,
                      scenario: dict, ideal_behavior: str,
                      avoid: list[str] | None = None, edge: bool = False,
                      avoid_questions: list[str] | None = None,
-                     gaps: list[str] | None = None) -> dict:
+                     gaps: list[str] | None = None,
+                     force_gap: bool = False) -> dict:
     mock = {
         "dimension": "severity of the situation",
         "instance": (f"A specific, near yes-or-no instance of: "
@@ -322,7 +323,7 @@ def confirm_pairwise(agent: str, does: str, description: str, audience: str,
                                           scenario, ideal_behavior,
                                           avoid=avoid, edge=edge,
                                           avoid_questions=avoid_questions,
-                                          gaps=gaps),
+                                          gaps=gaps, force_gap=force_gap),
         prompts.CONFIRM_SCHEMA, mock, temperature=0.7)
 
 

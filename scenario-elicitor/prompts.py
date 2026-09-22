@@ -862,7 +862,8 @@ def confirm_pairwise_messages(agent: str, does: str, description: str, audience:
                               avoid: list[str] | None = None,
                               edge: bool = False,
                               avoid_questions: list[str] | None = None,
-                              gaps: list[str] | None = None) -> list[dict]:
+                              gaps: list[str] | None = None,
+                              force_gap: bool = False) -> list[dict]:
     dims = "; ".join(CONFIRM_DIMENSIONS)
     # Later rounds reuse the same situations, so ask for a dimension that has
     # not been used yet; otherwise the person answers the same question twice.
@@ -878,7 +879,13 @@ def confirm_pairwise_messages(agent: str, does: str, description: str, audience:
                   ". Write a DIFFERENT message this time, a fresh way the "
                   "same situation could come up, never a rewording of one "
                   "of those.")
-    if gaps:
+    if gaps and force_gap:
+        extra += (" The person's rule is currently weakest on: "
+                  + "; ".join(gaps) +
+                  ". This close call MUST be built around one of those "
+                  "gaps: pick the moment so that the rule's silence on it "
+                  "is exactly what makes the call close.")
+    elif gaps:
         extra += (" The person's rule is currently weakest on: "
                   + "; ".join(gaps) +
                   ". Give modest extra weight to moments that would reveal "

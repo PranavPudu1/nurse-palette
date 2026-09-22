@@ -17,9 +17,10 @@ Everything here traces to the Sep 22 think-aloud with Winnie and Min.
   record is always exactly what is on screen (the "rule got cut short"
   bug, hit twice in the session).
 - **Rounds rotate and vary**: each round anchors on a different one of the
-  theme's cases, the child never repeats an earlier message, and the
-  situations lean gently toward the rubric's weakest criteria. Left/right
-  option sides are coin-flipped and recorded.
+  theme's cases and the child never repeats an earlier message. Round 1
+  leans gently toward the rubric's weakest criteria, one of round 2's two
+  close calls must target one, and the scored round 3 ignores the rubric.
+  Left/right option sides are coin-flipped and recorded.
 - **Reading is tracked**: the case tabs became a pager; Done reading names
   the cases not yet opened.
 - **Case thumbs + comments, and a skip**: every example reply takes a
