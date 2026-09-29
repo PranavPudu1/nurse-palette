@@ -30,6 +30,15 @@ class NurseInput(BaseModel):
     id: str
     name: str
     level: int  # 1..5
+    # 1-indexed day-of-month employment window, inclusive. None = unrestricted.
+    # Set for temp nurses, and for anyone joining or leaving mid-month.
+    available_from_day: Optional[int] = None
+    available_until_day: Optional[int] = None
+    # A temp costs more per hour and more to engage at all.
+    is_temp: bool = False
+    # A temp the solver invented for a what-if variant, with no database row.
+    # Only phantoms count against max_active_phantoms.
+    is_phantom: bool = False
 
 
 class WardConfigInput(BaseModel):
@@ -84,6 +93,12 @@ class ScheduleRequest(BaseModel):
     hard_constraints: Optional[HardConstraintParams] = None
     num_options: int = 3
     time_limit_seconds: float = 15.0
+    # Cap on how many invented temps may actually be used. The phantom pool is
+    # deliberately larger than this, one per seniority level, so the solver picks
+    # both how many temps and which levels rather than being told.
+    max_active_phantoms: Optional[int] = None
+    temp_fixed_cost: int = 1500
+    temp_rate_multiplier: float = 1.5
 
 
 class ScheduleOption(BaseModel):
@@ -91,10 +106,45 @@ class ScheduleOption(BaseModel):
     label: str
     schedule: dict[str, dict[str, str]]
     objective_value: Optional[float] = None
+    # Which temps this particular option hires. Two options for the same temp
+    # budget can hire different people, so this has to be per option, not per
+    # variant - the grid rows and the apply step both read it.
+    temps: list["TempSummary"] = []
 
 
 class ScheduleResponse(BaseModel):
     options: list[ScheduleOption]
+
+
+class TempSummary(BaseModel):
+    """A temp the solver actually used - in effect, the hiring spec."""
+    id: str
+    name: str
+    level: int
+    shift_count: int
+    dates: list[str]
+
+
+class TempVariant(BaseModel):
+    temp_count: int
+    status: str  # "feasible" | "infeasible" | "no_solution_found"
+    options: list[ScheduleOption] = []
+    temps: list[TempSummary] = []
+
+
+ScheduleOption.model_rebuild()
+
+
+class TempVariantRequest(ScheduleRequest):
+    # Ascending. Each count is solved separately and presented in order.
+    temp_counts: list[int] = [1, 2, 3]
+    options_per_count: int = 1
+
+
+class TempVariantResponse(BaseModel):
+    """Smallest workable number of temps, plus a variant per count tried."""
+    min_feasible_count: Optional[int] = None
+    variants: list[TempVariant] = []
 
 
 # ──────────────────────────────────────────────
@@ -173,16 +223,46 @@ def build_and_solve(req: ScheduleRequest, prev_solutions: list[dict] = None):
     work = {(i, d): model.new_bool_var(f"w_{i}_{d}") for i in nurse_range for d in days}
     active = {i: model.new_bool_var(f"a_{i}") for i in nurse_range}
 
+    # Employment windows, precomputed so the inner loop stays two comparisons.
+    # A nurse with no window is treated as available all month.
+    win_lo = [n.available_from_day if n.available_from_day is not None else 1 for n in nurses]
+    win_hi = [n.available_until_day if n.available_until_day is not None else D for n in nurses]
+
     # ── Hard Constraints ──
 
-    # 1. One shift per day + link work + unavail + active
+    # 1. One shift per day + link work + unavail + window + active
+    #
+    # Pinning work to 0 is enough to cover all three slots, because work is
+    # defined as the sum of the slot vars on the line above. Every other
+    # constraint and objective term for that nurse-day is then multiplied by a
+    # variable that is already zero, so nothing else needs a window check.
     for i in nurse_range:
         for d in days:
             model.add(sum(x[(i, d, t)] for t in slots) <= hc.max_shifts_per_day)
             model.add(work[(i, d)] == sum(x[(i, d, t)] for t in slots))
-            if (i, d) in unavail_set:
+            if (i, d) in unavail_set or not (win_lo[i] <= d <= win_hi[i]):
                 model.add(work[(i, d)] == 0)
             model.add(work[(i, d)] <= active[i])
+
+    # 1b. Phantom temps: cap how many may be used, and make `active` exact for
+    # them. Elsewhere active is only an upper bound, which is harmless when it
+    # merely carries a cost - but here it is being counted, so an idle phantom
+    # must be forced inactive or it would consume one of the k slots.
+    phantom_indices = [i for i in nurse_range if nurses[i].is_phantom]
+    if phantom_indices:
+        for i in phantom_indices:
+            model.add(active[i] <= sum(work[(i, d)] for d in days))
+        if req.max_active_phantoms is not None:
+            model.add(sum(active[i] for i in phantom_indices) <= req.max_active_phantoms)
+        # Identical phantoms at the same level are interchangeable, which makes
+        # the search waste time on permutations of the same schedule. Ordering
+        # them within a level removes that symmetry.
+        by_level: dict[int, list[int]] = {}
+        for i in phantom_indices:
+            by_level.setdefault(levels[i], []).append(i)
+        for group in by_level.values():
+            for a, b in zip(group, group[1:]):
+                model.add(active[a] >= active[b])
 
     # 2. Demand & skill mix
     for d in days:
@@ -254,13 +334,18 @@ def build_and_solve(req: ScheduleRequest, prev_solutions: list[dict] = None):
 
     obj2 = []
 
-    # Fixed cost per active nurse
+    # Fixed cost per active nurse. A temp is more expensive to engage at all,
+    # which is what makes the solver reach for one only when it has to - and
+    # prefer the cheapest seniority that still works.
     for i in nurse_range:
-        obj2.append(2 * fixed_nurse_cost * active[i])
+        engage = req.temp_fixed_cost if nurses[i].is_temp else fixed_nurse_cost
+        obj2.append(2 * engage * active[i])
 
     # Wage costs
     for i in nurse_range:
         base = base_rate.get(levels[i], 40)
+        if nurses[i].is_temp:
+            base = int(base * req.temp_rate_multiplier)
         for d in days:
             obj2.append(2 * HOURS_PER_SHIFT * base * x[(i, d, DAY_SLOT)])
             obj2.append(2 * HOURS_PER_SHIFT * base * x[(i, d, EVE_SLOT)])
@@ -276,6 +361,8 @@ def build_and_solve(req: ScheduleRequest, prev_solutions: list[dict] = None):
         model.add(ot[i] >= hours_var - 40)
         model.add(ot[i] >= 0)
         base = base_rate.get(levels[i], 40)
+        if nurses[i].is_temp:
+            base = int(base * req.temp_rate_multiplier)
         obj2.append(base * ot[i])
 
     # Legacy preference penalties (backward compat)
@@ -412,7 +499,10 @@ def build_and_solve(req: ScheduleRequest, prev_solutions: list[dict] = None):
         solver.parameters.max_time_in_seconds = req.time_limit_seconds
         status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return None, None, None
+        # Return the status so the caller can tell "provably impossible" from
+        # "ran out of time". The two need different advice: only genuine
+        # infeasibility justifies offering to hire temp nurses.
+        return None, None, None, status
 
     # Extract result
     x_vals = {}
@@ -430,7 +520,7 @@ def build_and_solve(req: ScheduleRequest, prev_solutions: list[dict] = None):
                     assigned_slot = SLOT_NAME[t]
             schedule[nid][key] = assigned_slot or "X"
 
-    return schedule, float(solver.objective_value) / 2.0, x_vals
+    return schedule, float(solver.objective_value) / 2.0, x_vals, status
 
 
 def _resolve_workers(params: dict, single_ni: int | None, nurse_range: list[int], id_to_idx: dict) -> list[int]:
@@ -446,16 +536,33 @@ def _resolve_workers(params: dict, single_ni: int | None, nurse_range: list[int]
 # ──────────────────────────────────────────────
 # Endpoint
 # ──────────────────────────────────────────────
+def infeasible_detail(status) -> dict:
+    """Structured failure detail so the client can branch on the cause.
+
+    "infeasible" means the solver proved no schedule exists under these hard
+    constraints, which is the only case where hiring temp nurses is the right
+    suggestion. "no_solution_found" means the search ran out of time, where the
+    right suggestion is a longer budget.
+    """
+    proven = status == cp_model.INFEASIBLE
+    return {
+        "code": "infeasible" if proven else "no_solution_found",
+        "message": ("No feasible schedule found. Check constraints/demand."
+                    if proven else
+                    "The solver ran out of time before finding a schedule."),
+    }
+
+
 @app.post("/generate", response_model=ScheduleResponse)
 async def generate_schedule(req: ScheduleRequest):
     options: list[ScheduleOption] = []
     prev_solutions: list[dict] = []
 
     for i in range(req.num_options):
-        sched, obj_val, x_vals = build_and_solve(req, prev_solutions)
+        sched, obj_val, x_vals, status = build_and_solve(req, prev_solutions)
         if sched is None:
             if i == 0:
-                raise HTTPException(status_code=422, detail="No feasible schedule found. Check constraints/demand.")
+                raise HTTPException(status_code=422, detail=infeasible_detail(status))
             break
         options.append(ScheduleOption(
             id=f"option-{i + 1}",
@@ -466,6 +573,111 @@ async def generate_schedule(req: ScheduleRequest):
         prev_solutions.append(x_vals)
 
     return ScheduleResponse(options=options)
+
+
+# One phantom per seniority level per slot, so the solver answers "how many
+# temps" and "which seniority" together. Fixing the level would be worse than
+# guessing: a level-1-only pool can report that even three temps cannot work
+# when a single senior temp would have covered the seniority floor.
+PHANTOM_LEVELS = [1, 2, 3, 4, 5]
+
+
+def _with_phantoms(req: TempVariantRequest, k: int) -> ScheduleRequest:
+    """The same ward and rules, plus a pool of invented temps capped at k."""
+    extras = [
+        NurseInput(
+            id=f"__temp_{level}_{j + 1}__",
+            name=f"Temp {level}.{j + 1}",
+            level=level,
+            is_temp=True,
+            is_phantom=True,
+        )
+        for level in PHANTOM_LEVELS
+        for j in range(k)
+    ]
+    return ScheduleRequest(
+        **{**req.model_dump(exclude={"temp_counts", "options_per_count", "nurses"}),
+           "nurses": list(req.nurses) + extras,
+           "num_options": req.options_per_count,
+           "max_active_phantoms": k}
+    )
+
+
+def _summarize_temps(sub: ScheduleRequest, schedule: dict) -> list[TempSummary]:
+    """The phantoms that actually got shifts - in effect, who to hire.
+
+    Also drops the idle phantoms from `schedule` in place. The pool is
+    deliberately larger than the cap, so most of it goes unused, and an unused
+    phantom is not a hire: it should not appear as an empty row in the grid, and
+    its placeholder id must never reach the apply step, which resolves ids to
+    real nurses.
+    """
+    out: list[TempSummary] = []
+    for n in sub.nurses:
+        if not n.is_phantom:
+            continue
+        worked = sorted(d for d, v in schedule.get(n.id, {}).items() if v != "X")
+        if not worked:
+            schedule.pop(n.id, None)
+            continue
+        out.append(TempSummary(id=n.id, name=n.name, level=n.level,
+                               shift_count=len(worked), dates=worked))
+    return out
+
+
+@app.post("/generate-temp-variants", response_model=TempVariantResponse)
+async def generate_temp_variants(req: TempVariantRequest):
+    """Schedules that become possible if temp nurses are hired.
+
+    Offered when the permanent staff cannot cover the month. Feasibility is
+    monotone in headcount here - demand is a lower bound, engaging a nurse is
+    optional, and every per-nurse rule is an upper bound, so a spare nurse can
+    always be given no shifts. The first count that works is therefore the
+    minimum.
+
+    Every requested count is still solved, because the manager is choosing
+    between them, not just looking for the smallest. The cap is an upper bound,
+    so a variant may use fewer temps than it was allowed - "3 allowed, 2 used"
+    is a real answer, and a more honest one than padding a third temp with a
+    token shift to fill the quota.
+    """
+    variants: list[TempVariant] = []
+    min_feasible: Optional[int] = None
+
+    for k in sorted(set(req.temp_counts)):
+        sub = _with_phantoms(req, k)
+        options: list[ScheduleOption] = []
+        temps: list[TempSummary] = []
+        prev_solutions: list[dict] = []
+        status_label = "infeasible"
+
+        for i in range(max(1, sub.num_options)):
+            sched, obj_val, x_vals, status = build_and_solve(sub, prev_solutions)
+            if sched is None:
+                if i == 0:
+                    status_label = ("infeasible" if status == cp_model.INFEASIBLE
+                                    else "no_solution_found")
+                break
+            status_label = "feasible"
+            used = _summarize_temps(sub, sched)  # also prunes idle phantom rows
+            if i == 0:
+                temps = used
+            options.append(ScheduleOption(
+                id=f"temp{k}-option-{i + 1}",
+                label=f"{k} temp · Option {i + 1}",
+                schedule=sched,
+                objective_value=obj_val,
+                temps=used,
+            ))
+            prev_solutions.append(x_vals)
+
+        variants.append(TempVariant(temp_count=k, status=status_label,
+                                    options=options, temps=temps))
+
+        if status_label == "feasible" and min_feasible is None:
+            min_feasible = k
+
+    return TempVariantResponse(min_feasible_count=min_feasible, variants=variants)
 
 
 @app.get("/health")

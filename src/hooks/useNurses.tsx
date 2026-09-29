@@ -9,10 +9,27 @@ export interface DbNurse {
   phone: string | null;
   department: string | null;
   level: number;
+  /** "permanent" | "temp". A temp is only schedulable inside its window. */
+  employment_type: string;
+  available_from: string | null;
+  available_until: string | null;
   user_id: string | null;
   invite_status: string;
   created_at: string;
   updated_at: string;
+}
+
+/** Writable fields on a nurse, shared by add and update. */
+export interface NurseInput {
+  name?: string;
+  email?: string;
+  phone?: string;
+  department?: string;
+  level?: number;
+  employment_type?: string;
+  /** ISO dates. Required for a temp, optional for anyone joining mid-month. */
+  available_from?: string | null;
+  available_until?: string | null;
 }
 
 export function useNurses() {
@@ -32,7 +49,7 @@ export function useNurses() {
 export function useAddNurse() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (nurse: { name: string; email?: string; phone?: string; department?: string; level?: number }) => {
+    mutationFn: async (nurse: NurseInput & { name: string }) => {
       const payload = {
         ...nurse,
         email: nurse.email?.trim().toLowerCase() || null,
@@ -49,7 +66,7 @@ export function useAddNurse() {
 export function useUpdateNurse() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; name?: string; email?: string; phone?: string; department?: string; level?: number }) => {
+    mutationFn: async ({ id, ...updates }: NurseInput & { id: string }) => {
       const payload = {
         ...updates,
         email: updates.email?.trim().toLowerCase() || null,

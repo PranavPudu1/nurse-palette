@@ -7,13 +7,26 @@ import { ViolationsPanel } from "./ViolationsPanel";
 import { ViolationLegend } from "./ViolationLegend";
 import { Legend } from "./Legend";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Check, AlertTriangle, DollarSign, Scale, Trophy, Info } from "lucide-react";
+import { Check, AlertTriangle, DollarSign, Scale, Trophy, Info, UserPlus } from "lucide-react";
 import { useLang } from "@/lib/i18n";
+import { summarizeVariant } from "@/lib/variant-stats";
+import type { TempSummary, AssumedRequest, VariantStats } from "@/lib/variant-stats";
 
 interface ScheduleOption {
   id: string;
   label: string;
   schedule: ScheduleData;
+  /** Temps this specific option hires. Two options for the same budget can
+   *  hire different people, so it is per option rather than per variant. */
+  temps?: TempSummary[];
+}
+
+/** One temp-count alternative, as returned by the optimizer. */
+export interface TempVariant {
+  temp_count: number;
+  status: "feasible" | "infeasible" | "no_solution_found";
+  options: ScheduleOption[];
+  temps: TempSummary[];
 }
 
 interface Props {
@@ -23,8 +36,15 @@ interface Props {
   month: number;
   wardConfigs: WardConfig[];
   exclusions: { nurse_id_1: string; nurse_id_2: string }[];
-  onApply: (schedule: ScheduleData) => void;
+  onApply: (schedule: ScheduleData, temps?: TempSummary[]) => void;
   onClose: () => void;
+  /** Present when comparing "what if we hire temps" alternatives. */
+  variants?: TempVariant[];
+  minFeasibleCount?: number | null;
+  /** Requests the generation assumed approved, so we can report which held up. */
+  assumedRequests?: AssumedRequest[];
+  /** Payroll for the schedule without temps, for the cost delta. */
+  baselineCost?: number | null;
 }
 
 function ScoreBar({ label, value, icon, help }: { label: string; value: number; icon: React.ReactNode; help?: string }) {
@@ -55,21 +75,102 @@ function ScoreBar({ label, value, icon, help }: { label: string; value: number; 
   );
 }
 
-export function ScheduleComparison({ options, nurses, year, month, wardConfigs, exclusions, onApply, onClose }: Props) {
+export function ScheduleComparison({
+  options,
+  nurses,
+  year,
+  month,
+  wardConfigs,
+  exclusions,
+  onApply,
+  onClose,
+  variants,
+  minFeasibleCount,
+  assumedRequests = [],
+  baselineCost = null,
+}: Props) {
   const { t } = useLang();
   const [selectedIdx, setSelectedIdx] = useState(0);
 
-  const gridNurses = useMemo(() => nurses.map((n) => ({ id: n.id, name: n.name })), [nurses]);
+  // ── Temp variants ──────────────────────────────────────────────────────────
+  const feasibleVariants = useMemo(
+    () => (variants ?? []).filter((v) => v.status === "feasible" && v.options.length > 0),
+    [variants]
+  );
+  const unreachable = useMemo(
+    () => (variants ?? []).filter((v) => v.status !== "feasible"),
+    [variants]
+  );
+  const [variantIdx, setVariantIdx] = useState(0);
+  const activeVariant = feasibleVariants[variantIdx];
+
+  const shownOptions = activeVariant ? activeVariant.options : options;
+  // Switching temp count can shrink the option list under the current
+  // selection, so every read goes through the clamped index.
+  const safeIdx = Math.min(selectedIdx, Math.max(0, shownOptions.length - 1));
+
+  // The phantom temps have to join the nurse list before anything is measured.
+  // Left out, the coverage check ignores their shifts and reports the schedule
+  // that fixes a gap as still short-staffed.
+  const activeTemps: TempSummary[] = shownOptions[safeIdx]?.temps ?? [];
+  const nursesForScoring: NurseWithLevel[] = useMemo(
+    () => activeTemps.length
+      ? [
+          ...nurses,
+          ...activeTemps.map((tp) => ({
+            id: tp.id,
+            name: tp.name,
+            level: tp.level,
+            badge: "phantom" as const,
+          })),
+        ]
+      : nurses,
+    [nurses, activeTemps]
+  );
+  const tempIdSet = useMemo(() => new Set(activeTemps.map((tp) => tp.id)), [activeTemps]);
 
   const scores = useMemo(
-    () => options.map((opt) => scoreSchedule(nurses, opt.schedule, year, month, wardConfigs, exclusions)),
-    [options, nurses, year, month, wardConfigs, exclusions]
+    () => shownOptions.map((opt) => scoreSchedule(
+      nursesForScoring, opt.schedule, year, month, wardConfigs, exclusions,
+      { fairnessExclude: tempIdSet }
+    )),
+    [shownOptions, nursesForScoring, year, month, wardConfigs, exclusions, tempIdSet]
+  );
+
+  // One row per temp count, which is what answers "which alternative", as
+  // opposed to the bars, which answer "how good is this one".
+  const variantStats = useMemo<{ variant: TempVariant; stats: VariantStats }[]>(
+    () => feasibleVariants.map((v) => {
+      const rowTemps = v.options[0].temps ?? [];
+      const withTemps: NurseWithLevel[] = [
+        ...nurses,
+        ...rowTemps.map((tp) => ({
+          id: tp.id, name: tp.name, level: tp.level, badge: "phantom" as const,
+        })),
+      ];
+      return {
+        variant: v,
+        stats: summarizeVariant({
+          nurses: withTemps,
+          schedule: v.options[0].schedule,
+          year,
+          month,
+          wardConfigs,
+          exclusions,
+          temps: rowTemps,
+          tempsAllowed: v.temp_count,
+          baselineCost,
+          assumedRequests,
+        }),
+      };
+    }),
+    [feasibleVariants, nurses, year, month, wardConfigs, exclusions, baselineCost, assumedRequests]
   );
 
   const violationsByOption = useMemo(
-    () => options.map((opt) =>
-      validateSchedule(nurses, opt.schedule, year, month, wardConfigs, exclusions)),
-    [options, nurses, year, month, wardConfigs, exclusions]
+    () => shownOptions.map((opt) =>
+      validateSchedule(nursesForScoring, opt.schedule, year, month, wardConfigs, exclusions)),
+    [shownOptions, nursesForScoring, year, month, wardConfigs, exclusions]
   );
 
   const violationCounts = useMemo(
@@ -81,8 +182,8 @@ export function ScheduleComparison({ options, nurses, year, month, wardConfigs, 
   );
 
   const nurseNames = useMemo(
-    () => Object.fromEntries(nurses.map((n) => [n.id, n.name])),
-    [nurses]
+    () => Object.fromEntries(nursesForScoring.map((n) => [n.id, n.name])),
+    [nursesForScoring]
   );
 
   const bestIdx = scores.reduce((best, s, i) => (s.total > scores[best].total ? i : best), 0);
@@ -99,14 +200,105 @@ export function ScheduleComparison({ options, nurses, year, month, wardConfigs, 
         </button>
       </div>
 
+      {/* Counts that cannot work at all: stated once, not as three empty cards. */}
+      {unreachable.length > 0 && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {unreachable.map((v) => (
+            <div key={v.temp_count}>
+              {v.status === "infeasible"
+                ? t("temp.notEnough", { n: v.temp_count })
+                : t("temp.timedOut", { n: v.temp_count })}
+            </div>
+          ))}
+          {feasibleVariants.length === 0 && (
+            <p className="mt-1 text-xs">{t("temp.noneWork")}</p>
+          )}
+        </div>
+      )}
+
+      {/* Which alternative, rather than how good one is. Generating options moves
+          the manager from writing schedules to judging them, and judging needs
+          figures that map onto real decisions. */}
+      {variantStats.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <UserPlus className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">{t("temp.tableTitle")}</h3>
+            {minFeasibleCount != null && (
+              <span className="text-xs text-muted-foreground">
+                {t("temp.minFeasible", { n: minFeasibleCount })}
+              </span>
+            )}
+          </div>
+          <div className="overflow-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/60 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colTemps")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colShifts")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colCost")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colErrors")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colGaps")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colOvertime")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colRequests")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("temp.colDates")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {variantStats.map(({ variant, stats }, idx) => (
+                  <tr
+                    key={variant.temp_count}
+                    onClick={() => { setVariantIdx(idx); setSelectedIdx(0); }}
+                    className={`cursor-pointer border-t border-border transition-colors ${
+                      idx === variantIdx ? "bg-primary/5" : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <td className="px-3 py-2 font-medium">
+                      {stats.tempsUsed === stats.tempsAllowed
+                        ? t("temp.usedN", { n: stats.tempsUsed })
+                        : t("temp.usedOfAllowed", { used: stats.tempsUsed, allowed: stats.tempsAllowed })}
+                    </td>
+                    <td className="px-3 py-2">{stats.tempShifts}</td>
+                    <td className="px-3 py-2">
+                      {stats.cost.toLocaleString()}
+                      {stats.costDelta != null && (
+                        <span className={stats.costDelta > 0 ? "text-destructive ml-1" : "text-emerald-600 ml-1"}>
+                          ({stats.costDelta > 0 ? "+" : ""}{stats.costDelta.toLocaleString()})
+                        </span>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2 ${stats.errors > 0 ? "text-destructive font-semibold" : ""}`}>
+                      {stats.errors}
+                    </td>
+                    <td className="px-3 py-2">{stats.coverageGaps}</td>
+                    <td className="px-3 py-2">{stats.permanentOvertime}</td>
+                    <td className="px-3 py-2">
+                      {stats.requestsConsidered > 0
+                        ? `${stats.requestsHonored}/${stats.requestsConsidered}`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {(variant.options[0].temps ?? []).map((tp) =>
+                        `L${tp.level}: ${tp.dates.map((d) => d.slice(8)).join(", ")}`
+                      ).join(" · ") || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("temp.datesAreSpec")}</p>
+        </div>
+      )}
+
       {/* Score cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {options.map((opt, idx) => (
+        {shownOptions.map((opt, idx) => (
           <button
             key={opt.id}
             onClick={() => setSelectedIdx(idx)}
             className={`relative rounded-lg border p-4 text-left transition-all ${
-              selectedIdx === idx
+              safeIdx === idx
                 ? "border-primary ring-2 ring-primary/20 bg-card"
                 : "border-border bg-card hover:border-primary/40"
             }`}
@@ -149,20 +341,20 @@ export function ScheduleComparison({ options, nurses, year, month, wardConfigs, 
       {/* Selected schedule grid */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <h3 className="text-sm font-semibold">{t("cmp.preview", { label: options[selectedIdx].label })}</h3>
+          <h3 className="text-sm font-semibold">{t("cmp.preview", { label: shownOptions[safeIdx].label })}</h3>
           <Legend />
         </div>
         <ViolationLegend />
         <ScheduleGrid
-          nurses={gridNurses}
-          schedule={options[selectedIdx].schedule}
+          nurses={nursesForScoring}
+          schedule={shownOptions[safeIdx].schedule}
           year={year}
           month={month}
           readOnly={true}
-          violations={violationsByOption[selectedIdx]}
+          violations={violationsByOption[safeIdx]}
         />
         <ViolationsPanel
-          violations={violationsByOption[selectedIdx]}
+          violations={violationsByOption[safeIdx]}
           nurseNames={nurseNames}
         />
       </div>
@@ -170,10 +362,10 @@ export function ScheduleComparison({ options, nurses, year, month, wardConfigs, 
       {/* Apply button */}
       <div className="flex justify-end gap-3">
         <button
-          onClick={() => onApply(options[selectedIdx].schedule)}
+          onClick={() => onApply(shownOptions[safeIdx].schedule, activeTemps)}
           className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
-          <Check className="w-4 h-4" /> {t("cmp.apply", { label: options[selectedIdx].label })}
+          <Check className="w-4 h-4" /> {t("cmp.apply", { label: shownOptions[safeIdx].label })}
         </button>
       </div>
     </div>

@@ -2,6 +2,12 @@ import { useState } from "react";
 import { useNurses, useAddNurse, useRemoveNurse, useUpdateNurse, DbNurse } from "@/hooks/useNurses";
 import { Plus, Trash2, Pencil, X, Check, User } from "lucide-react";
 import { useLang } from "@/lib/i18n";
+import { NurseBadge } from "@/components/NurseBadge";
+
+const BLANK = {
+  name: "", email: "", phone: "", department: "General", level: "1",
+  employment_type: "permanent", available_from: "", available_until: "",
+};
 
 export function NursesPanel() {
   const { t } = useLang();
@@ -11,20 +17,37 @@ export function NursesPanel() {
   const updateNurse = useUpdateNurse();
 
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", department: "General", level: "1" });
+  const [form, setForm] = useState({ ...BLANK });
+  const [formError, setFormError] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", department: "", level: "1" });
 
+  const isTemp = form.employment_type === "temp";
+
   const handleAdd = () => {
     if (!form.name.trim()) return;
+    // A temp without a window would be schedulable all month, which is the one
+    // thing the category exists to prevent.
+    if (isTemp && (!form.available_from || !form.available_until)) {
+      setFormError(t("nurses.tempNeedsWindow"));
+      return;
+    }
+    if (form.available_from && form.available_until && form.available_until < form.available_from) {
+      setFormError(t("pref.invalidRange"));
+      return;
+    }
+    setFormError(null);
     addNurse.mutate({
       name: form.name,
       email: form.email || undefined,
       phone: form.phone || undefined,
       department: form.department || "General",
       level: parseInt(form.level) || 1,
+      employment_type: form.employment_type,
+      available_from: form.available_from || null,
+      available_until: form.available_until || null,
     });
-    setForm({ name: "", email: "", phone: "", department: "General", level: "1" });
+    setForm({ ...BLANK });
     setShowAdd(false);
   };
 
@@ -77,7 +100,35 @@ export function NursesPanel() {
                 {[1,2,3,4,5].map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground whitespace-nowrap">{t("nurses.employment")}</label>
+              <select value={form.employment_type}
+                onChange={(e) => setForm({ ...form, employment_type: e.target.value })}
+                className="px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/30 w-full">
+                <option value="permanent">{t("nurses.permanent")}</option>
+                <option value="temp">{t("nurses.temp")}</option>
+              </select>
+            </div>
+            {/* Only a temp gets a duration, so a permanent hire is not asked for
+                dates that do not apply to them. */}
+            {isTemp && (
+              <>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">{t("nurses.availableFrom")}</label>
+                  <input type="date" value={form.available_from}
+                    onChange={(e) => setForm({ ...form, available_from: e.target.value })}
+                    className="px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/30 w-full" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">{t("nurses.availableUntil")}</label>
+                  <input type="date" value={form.available_until}
+                    onChange={(e) => setForm({ ...form, available_until: e.target.value })}
+                    className="px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/30 w-full" />
+                </div>
+              </>
+            )}
           </div>
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
           <div className="flex gap-2">
             <button onClick={handleAdd} disabled={!form.name.trim() || addNurse.isPending}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
@@ -127,12 +178,22 @@ export function NursesPanel() {
                     </>
                   ) : (
                     <>
-                      <td className="px-4 py-2.5 text-sm font-medium flex items-center gap-2"><User className="w-4 h-4 text-muted-foreground" />{n.name}</td>
+                      <td className="px-4 py-2.5 text-sm font-medium flex items-center gap-2">
+                        <User className="w-4 h-4 text-muted-foreground" />{n.name}
+                        <NurseBadge kind={n.employment_type === "temp" ? "temp" : undefined} />
+                      </td>
                       <td className="px-4 py-2.5 text-sm">
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold">{n.level}</span>
                       </td>
                       <td className="px-4 py-2.5 text-sm text-muted-foreground hidden sm:table-cell">{n.email || "—"}</td>
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground hidden md:table-cell">{n.department || "—"}</td>
+                      <td className="px-4 py-2.5 text-sm text-muted-foreground hidden md:table-cell">
+                        {n.department || "—"}
+                        {n.available_from && n.available_until && (
+                          <span className="block text-xs text-muted-foreground/70">
+                            {n.available_from} → {n.available_until}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 hidden sm:table-cell">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                           n.invite_status === "accepted"

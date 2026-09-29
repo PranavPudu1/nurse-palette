@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScheduleTab } from "@/components/ScheduleTab";
@@ -12,6 +13,11 @@ import { useLang } from "@/lib/i18n";
 const Index = () => {
   const { user, signOut } = useAuth();
   const { t } = useLang();
+  // Controlled so the requests page can send the manager to the schedule tab
+  // with its leanings in hand. Radix unmounts the inactive tab, so the
+  // assumption set has to live here rather than inside ScheduleTab.
+  const [tab, setTab] = useState("schedule");
+  const [explore, setExplore] = useState<{ ids: string[]; year: number; month: number } | null>(null);
 
   return (
     <div className="min-h-screen bg-background">
@@ -34,7 +40,7 @@ const Index = () => {
       </header>
 
       <main className="max-w-[1600px] mx-auto px-6 py-6">
-        <Tabs defaultValue="schedule" className="space-y-6">
+        <Tabs value={tab} onValueChange={setTab} className="space-y-6">
           <TabsList>
             <TabsTrigger value="schedule" className="gap-1.5">
               <CalendarDays className="w-4 h-4" /> {t("tab.schedule")}
@@ -54,13 +60,18 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="schedule">
-            <ScheduleTab />
+            <ScheduleTab explore={explore} />
           </TabsContent>
           <TabsContent value="nurses">
             <NursesPanel />
           </TabsContent>
           <TabsContent value="requests">
-            <RequestsPanel />
+            <RequestsPanel
+              onExplore={(ids, year, month) => {
+                setExplore({ ids, year, month });
+                setTab("schedule");
+              }}
+            />
           </TabsContent>
           <TabsContent value="ward-config">
             <WardConfigPanel />

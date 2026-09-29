@@ -268,33 +268,29 @@ export function buildViolationMap(violations: Violation[]): Record<string, Viola
 }
 
 /**
- * Calculate schedule score
+ * Estimated payroll for a schedule, in whole currency units.
+ *
+ * Extracted from scoreSchedule so a variant comparison can show a real money
+ * figure that is guaranteed to agree with the Cost bar beside it.
  */
-export function scoreSchedule(
+export function estimateCost(
   nurses: NurseWithLevel[],
   schedule: ScheduleData,
   year: number,
-  month: number,
-  wardConfigs: WardConfig[],
-  exclusions: { nurse_id_1: string; nurse_id_2: string }[] = []
-): { cost: number; fairness: number; preference: number; violations: number; total: number } {
-  const violations = validateSchedule(nurses, schedule, year, month, wardConfigs, exclusions);
+  month: number
+): number {
   const days = getDaysInMonth(year, month);
-
-  // Cost calculation (lower is better)
   let totalCost = 0;
   const BASE_RATE = 30;
   const NIGHT_DIFF = 10;
   const OVERTIME_RATE = 45;
 
   for (const nurse of nurses) {
-    let monthShifts = 0;
     let weekShifts = 0;
     for (let d = 1; d <= days; d++) {
       const key = dateKey(year, month, d);
       const shift = schedule[nurse.id]?.[key] ?? "X";
       if (shift !== "X") {
-        monthShifts++;
         weekShifts++;
         const hours = 8;
         if (shift === "N") {
@@ -309,9 +305,44 @@ export function scoreSchedule(
       if (date.getDay() === 0) weekShifts = 0;
     }
   }
+  return totalCost;
+}
+
+export interface ScoreOptions {
+  /**
+   * Nurse ids left out of the fairness figure.
+   *
+   * Fairness is the spread of shift counts, so a temp working a handful of days
+   * beside permanents working twenty reads as gross unfairness and drags the
+   * overall score down for a measurement reason rather than a scheduling one.
+   * Temps are excluded so fairness keeps meaning "is the load even across the
+   * regular team"; the explicit temp cost is what discourages hiring.
+   */
+  fairnessExclude?: Set<string>;
+}
+
+/**
+ * Calculate schedule score
+ */
+export function scoreSchedule(
+  nurses: NurseWithLevel[],
+  schedule: ScheduleData,
+  year: number,
+  month: number,
+  wardConfigs: WardConfig[],
+  exclusions: { nurse_id_1: string; nurse_id_2: string }[] = [],
+  opts: ScoreOptions = {}
+): { cost: number; fairness: number; preference: number; violations: number; total: number } {
+  const violations = validateSchedule(nurses, schedule, year, month, wardConfigs, exclusions);
+  const days = getDaysInMonth(year, month);
+
+  const totalCost = estimateCost(nurses, schedule, year, month);
 
   // Fairness (standard deviation of total shifts per nurse, lower is better)
-  const shiftCounts = nurses.map((n) => {
+  const fairnessPool = opts.fairnessExclude?.size
+    ? nurses.filter((n) => !opts.fairnessExclude!.has(n.id))
+    : nurses;
+  const shiftCounts = fairnessPool.map((n) => {
     let count = 0;
     for (let d = 1; d <= days; d++) {
       const key = dateKey(year, month, d);

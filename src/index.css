@@ -45,6 +45,10 @@
     --shift-night-foreground: 0 0% 100%;
     --shift-off: 210 15% 92%;
     --shift-off-foreground: 215 10% 55%;
+    /* Time off: readable against the shift letters without competing with them,
+       since it marks an absence rather than a shift. */
+    --shift-timeoff: 190 45% 88%;
+    --shift-timeoff-foreground: 195 45% 30%;
 
     /* Grid */
     --grid-border: 214 20% 90%;

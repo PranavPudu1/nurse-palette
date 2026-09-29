@@ -18,32 +18,44 @@ export type Database = {
         Row: {
           created_at: string
           decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
           end_date: string
           id: string
           nurse_id: string
           reason: string | null
           start_date: string
           status: string
+          tentative: string | null
+          tentative_at: string | null
         }
         Insert: {
           created_at?: string
           decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
           end_date: string
           id?: string
           nurse_id: string
           reason?: string | null
           start_date: string
           status?: string
+          tentative?: string | null
+          tentative_at?: string | null
         }
         Update: {
           created_at?: string
           decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
           end_date?: string
           id?: string
           nurse_id?: string
           reason?: string | null
           start_date?: string
           status?: string
+          tentative?: string | null
+          tentative_at?: string | null
         }
         Relationships: [
           {
@@ -185,6 +197,7 @@ export type Database = {
           id: string
           nurse_id: string
           reason: string | null
+          request_id: string | null
         }
         Insert: {
           created_at?: string
@@ -192,6 +205,7 @@ export type Database = {
           id?: string
           nurse_id: string
           reason?: string | null
+          request_id?: string | null
         }
         Update: {
           created_at?: string
@@ -199,6 +213,7 @@ export type Database = {
           id?: string
           nurse_id?: string
           reason?: string | null
+          request_id?: string | null
         }
         Relationships: [
           {
@@ -217,11 +232,62 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body_key: string
+          created_at: string
+          id: string
+          kind: string
+          nurse_id: string
+          payload: Json
+          read_at: string | null
+          request_id: string | null
+        }
+        Insert: {
+          body_key: string
+          created_at?: string
+          id?: string
+          kind: string
+          nurse_id: string
+          payload?: Json
+          read_at?: string | null
+          request_id?: string | null
+        }
+        Update: {
+          body_key?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          nurse_id?: string
+          payload?: Json
+          read_at?: string | null
+          request_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_nurse_id_fkey"
+            columns: ["nurse_id"]
+            isOneToOne: false
+            referencedRelation: "nurses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "day_off_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nurses: {
         Row: {
+          available_from: string | null
+          available_until: string | null
           created_at: string
           department: string | null
           email: string | null
+          employment_type: string
           id: string
           invite_status: string
           level: number
@@ -231,9 +297,12 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          available_from?: string | null
+          available_until?: string | null
           created_at?: string
           department?: string | null
           email?: string | null
+          employment_type?: string
           id?: string
           invite_status?: string
           level?: number
@@ -243,9 +312,12 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          available_from?: string | null
+          available_until?: string | null
           created_at?: string
           department?: string | null
           email?: string | null
+          employment_type?: string
           id?: string
           invite_status?: string
           level?: number
@@ -258,6 +330,7 @@ export type Database = {
       }
       schedule_generations: {
         Row: {
+          assumptions: Json
           created_at: string
           created_by: string | null
           id: string
@@ -266,6 +339,7 @@ export type Database = {
           year: number
         }
         Insert: {
+          assumptions?: Json
           created_at?: string
           created_by?: string | null
           id?: string
@@ -274,6 +348,7 @@ export type Database = {
           year: number
         }
         Update: {
+          assumptions?: Json
           created_at?: string
           created_by?: string | null
           id?: string
@@ -444,6 +519,7 @@ export type Database = {
       nurses_public: {
         Row: {
           department: string | null
+          employment_type: string | null
           id: string | null
           invite_status: string | null
           name: string | null
@@ -451,6 +527,7 @@ export type Database = {
         }
         Insert: {
           department?: string | null
+          employment_type?: string | null
           id?: string | null
           invite_status?: string | null
           name?: string | null
@@ -458,6 +535,7 @@ export type Database = {
         }
         Update: {
           department?: string | null
+          employment_type?: string | null
           id?: string | null
           invite_status?: string | null
           name?: string | null
@@ -471,13 +549,26 @@ export type Database = {
         Args: { _nurse_id: string }
         Returns: boolean
       }
+      apply_schedule_with_temps: {
+        Args: { p_shifts: Json; p_temps: Json }
+        Returns: Json
+      }
+      commit_tentative_decisions: {
+        Args: { p_request_ids: string[] }
+        Returns: number
+      }
       get_department_nurses: {
         Args: never
         Returns: {
           department: string
+          employment_type: string
           id: string
           name: string
         }[]
+      }
+      revert_day_off_decision: {
+        Args: { p_request_id: string }
+        Returns: undefined
       }
       is_accepted_nurse: { Args: { _user_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }

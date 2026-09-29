@@ -6,6 +6,8 @@ import { ViolationIndicator } from "@/components/ViolationIndicator";
 import type { Violation } from "@/lib/schedule-constraints";
 import { buildViolationMap } from "@/lib/schedule-constraints";
 import { useLang, DAY_ABBR } from "@/lib/i18n";
+import { NurseBadge } from "@/components/NurseBadge";
+import type { TimeOffMap } from "@/lib/time-off";
 
 interface ScheduleGridProps {
   nurses: Nurse[];
@@ -14,11 +16,41 @@ interface ScheduleGridProps {
   month: number;
   readOnly?: boolean;
   violations?: Violation[];
+  /** Dotted line for a pending request, solid for an approved day off. */
+  timeOff?: TimeOffMap;
   onCellClick?: (nurseId: string, key: string) => void;
   onCellClear?: (nurseId: string, key: string) => void;
   onRemoveNurse?: (nurseId: string) => void;
   onAddNurse?: (name: string) => void;
   onNurseNameClick?: (nurseId: string) => void;
+}
+
+/**
+ * One segment of a time-off run, drawn on the cell rather than as a single
+ * absolutely-positioned span across N columns: the day columns are min-width,
+ * so a measured span drifts. The table already collapses borders, so adjacent
+ * segments join into one continuous line.
+ *
+ * pointer-events-none matters - without it this would swallow the click that
+ * cycles the shift.
+ */
+function TimeOffRun({ marker }: { marker: { status: string; isStart: boolean; isEnd: boolean } }) {
+  const line = marker.status === "approved" ? "border-solid" : "border-dashed";
+  const hue = marker.status === "approved"
+    ? "border-shift-timeoff-foreground"
+    : "border-shift-timeoff-foreground/60";
+  return (
+    <span
+      aria-hidden
+      className={[
+        "pointer-events-none absolute inset-x-0 top-0 bottom-0 z-20 border-y-2",
+        line,
+        hue,
+        marker.isStart ? `border-l-2 ${line} rounded-l-sm` : "",
+        marker.isEnd ? `border-r-2 ${line} rounded-r-sm` : "",
+      ].join(" ")}
+    />
+  );
 }
 
 export function ScheduleGrid({
@@ -28,6 +60,7 @@ export function ScheduleGrid({
   month,
   readOnly = false,
   violations = [],
+  timeOff = {},
   onCellClick,
   onCellClear,
   onRemoveNurse,
@@ -92,28 +125,40 @@ export function ScheduleGrid({
             {nurses.map((nurse) => (
               <tr key={nurse.id} className="group hover:bg-grid-hover/40">
                 <td className="sticky left-0 z-10 bg-card group-hover:bg-grid-hover/60 px-4 py-1.5 text-sm font-medium border-b border-r border-grid-border whitespace-nowrap">
-                  <button
-                    onClick={() => onNurseNameClick?.(nurse.id)}
-                    className="text-left hover:text-primary hover:underline transition-colors cursor-pointer"
-                  >
-                    {nurse.name}
-                  </button>
+                  <span className="inline-flex items-center gap-1.5">
+                    <button
+                      onClick={() => onNurseNameClick?.(nurse.id)}
+                      className="text-left hover:text-primary hover:underline transition-colors cursor-pointer"
+                    >
+                      {nurse.name}
+                    </button>
+                    <NurseBadge kind={nurse.badge} />
+                  </span>
                 </td>
                 {Array.from({ length: days }, (_, i) => {
-                  const key = dateKey(year, month, i + 1);
+                  const day = i + 1;
+                  const key = dateKey(year, month, day);
                   const val: ShiftType = schedule[nurse.id]?.[key] ?? "X";
                   const cellViolations = violationMap[`${nurse.id}:${key}`] ?? [];
+                  const off = timeOff[`${nurse.id}:${key}`];
+                  const outside =
+                    (nurse.availableFrom !== undefined && day < nurse.availableFrom) ||
+                    (nurse.availableUntil !== undefined && day > nurse.availableUntil);
                   return (
                     <td key={key} className="px-0.5 py-0.5 border-b border-grid-border text-center relative">
                       <ShiftCell
                         value={val}
                         readOnly={readOnly}
+                        timeOff={off?.status}
+                        outsideWindow={outside}
+                        label={off ? `${t(`shift.O.${off.status}`)}: ${key}` : undefined}
                         onClick={() => onCellClick?.(nurse.id, key)}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           onCellClear?.(nurse.id, key);
                         }}
                       />
+                      {off && <TimeOffRun marker={off} />}
                       <ViolationIndicator violations={cellViolations} />
                     </td>
                   );

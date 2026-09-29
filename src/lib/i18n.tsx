@@ -38,6 +38,12 @@ const T: Record<string, { en: string; ko: string }> = {
   "shift.E": { en: "Evening", ko: "저녁" },
   "shift.N": { en: "Night", ko: "야간" },
   "shift.X": { en: "Off", ko: "휴무" },
+  // Time off is not a shift type, so it lives beside them rather than inside
+  // ShiftType, which is the database CHECK on schedules.shift_type.
+  "shift.O.pending": { en: "Time off requested", ko: "휴무 신청" },
+  "shift.O.approved": { en: "Time off approved", ko: "휴무 승인" },
+  "legend.ptoPending": { en: "Dotted = request pending", ko: "점선 = 신청 대기" },
+  "legend.ptoApproved": { en: "Solid = time off approved", ko: "실선 = 휴무 승인" },
 
   // === Month selector ===
   "month.prev": { en: "Previous month", ko: "이전 달" },
@@ -97,6 +103,17 @@ const T: Record<string, { en: string; ko: string }> = {
   "nurses.lvl": { en: "Lvl", ko: "레벨" },
   "nurses.status": { en: "Status", ko: "상태" },
   "nurses.active": { en: "Active", ko: "활동 중" },
+  "nurses.badgeTemp": { en: "Temp", ko: "임시" },
+  "nurses.badgeProposed": { en: "Proposed", ko: "제안" },
+  "nurses.employment": { en: "Employment", ko: "고용 형태" },
+  "nurses.permanent": { en: "Permanent", ko: "정규" },
+  "nurses.temp": { en: "Temporary", ko: "임시" },
+  "nurses.availableFrom": { en: "Available from", ko: "근무 시작일" },
+  "nurses.availableUntil": { en: "Available until", ko: "근무 종료일" },
+  "nurses.tempNeedsWindow": {
+    en: "A temporary nurse needs a start and end date, so the optimizer only schedules them inside it.",
+    ko: "임시 간호사는 시작일과 종료일이 필요합니다. 최적화 도구가 해당 기간에만 배정합니다.",
+  },
   "nurses.pending": { en: "Pending", ko: "대기 중" },
   "nurses.save": { en: "Save", ko: "저장" },
   "nurses.cancel": { en: "Cancel", ko: "취소" },
@@ -260,6 +277,126 @@ const T: Record<string, { en: string; ko: string }> = {
     ko: "요청이 승인되어 해당 날짜가 근무 불가로 등록되었습니다.",
   },
   "req.deniedToast": { en: "Request denied.", ko: "요청이 거부되었습니다." },
+
+  // === Two-stage decisions ===
+  "req.exploreApprove": { en: "Lean approve", ko: "승인 검토" },
+  "req.exploreDeny": { en: "Lean deny", ko: "거부 검토" },
+  "req.exploreClear": { en: "Undecided", ko: "미정" },
+  "req.exploreHelp": {
+    en: "This only affects what-if schedules. Nothing is decided and the nurse is not told until you record a final decision.",
+    ko: "가상 근무표에만 반영됩니다. 최종 결정을 기록할 때까지 아무것도 확정되지 않고 간호사에게 통보되지 않습니다.",
+  },
+  "req.tallyLeaning": {
+    en: "{approve} leaning approve · {deny} leaning deny · {undecided} undecided",
+    ko: "승인 검토 {approve}건 · 거부 검토 {deny}건 · 미정 {undecided}건",
+  },
+  "req.exploreOnSchedule": { en: "Explore on the Schedule tab →", ko: "근무표 탭에서 살펴보기 →" },
+  "req.recordFinal": { en: "Record final decision", ko: "최종 결정 기록" },
+  "req.recordFinalN": { en: "Record final decisions ({n})", ko: "최종 결정 기록 ({n}건)" },
+  "req.confirmTitle": { en: "Record these as final?", ko: "최종 결정으로 기록할까요?" },
+  "req.confirmBody": {
+    en: "Each nurse below is notified, and approved days become unavailable dates in the schedule. You can reopen a decision afterwards.",
+    ko: "아래 각 간호사에게 통보되며, 승인된 날짜는 근무 불가 날짜로 등록됩니다. 이후에 결정을 다시 열 수 있습니다.",
+  },
+  "req.confirmCancel": { en: "Cancel", ko: "취소" },
+  "req.confirmGo": { en: "Record and notify", ko: "기록 후 통보" },
+  "req.committedToast": {
+    en: "{n} decision(s) recorded; the nurses have been notified.",
+    ko: "{n}건의 결정이 기록되어 간호사에게 통보되었습니다.",
+  },
+  "req.revertedToast": {
+    en: "Decision reopened; its days off were removed.",
+    ko: "결정이 다시 열렸고 해당 휴무일이 제거되었습니다.",
+  },
+  "req.changeDecision": { en: "Change decision", ko: "결정 변경" },
+  "req.decidedOn": { en: "decided {date}", ko: "{date} 처리" },
+  "req.confirmRevert": {
+    en: "Reopen {name}'s request for {start} to {end}? Their days off will be removed from the schedule and they will be notified.",
+    ko: "{name}의 {start}~{end} 요청을 다시 열까요? 해당 휴무일이 근무표에서 제거되고 간호사에게 통보됩니다.",
+  },
+  "req.noLeanings": {
+    en: "Lean approve or deny on a request first, then record it as final.",
+    ko: "먼저 요청에 대해 승인 또는 거부를 검토한 뒤 최종 기록하세요.",
+  },
+
+  // === Schedule-tab assumptions ===
+  "sched.assumeTitle": { en: "What-if: pending time-off requests", ko: "가상 설정: 대기 중인 휴무 요청" },
+  "sched.assumeHelp": {
+    en: "Tick a request to generate as if it were approved. This changes only the generated schedule, never the request itself.",
+    ko: "요청을 선택하면 승인된 것으로 가정해 근무표를 생성합니다. 요청 자체는 변경되지 않습니다.",
+  },
+  "sched.assumeAll": { en: "Assume all approved", ko: "모두 승인 가정" },
+  "sched.assumeNone": { en: "Assume none", ko: "가정 없음" },
+  "sched.assumeBanner": {
+    en: "Exploring with {n} request(s) assumed approved — not yet decided.",
+    ko: "{n}건의 요청을 승인으로 가정해 검토 중입니다 — 아직 확정되지 않았습니다.",
+  },
+  "sched.assumeNoneBanner": { en: "No pending requests this month.", ko: "이번 달 대기 중인 요청이 없습니다." },
+  "sched.genAssumed": { en: "{n} assumed", ko: "{n}건 가정" },
+  "sched.genTemps": { en: "{n} temp(s)", ko: "임시 {n}명" },
+  "sched.tryTemps": { en: "Try hiring temp nurses", ko: "임시 간호사 고용 검토" },
+  "sched.retryLonger": { en: "Try again with more time", ko: "시간을 늘려 다시 시도" },
+  "sched.dismiss": { en: "Dismiss", ko: "닫기" },
+
+  // === Temp-nurse variants ===
+  "temp.tableTitle": { en: "If you hire temp nurses", ko: "임시 간호사를 고용하는 경우" },
+  "temp.minFeasible": {
+    en: "Fewest that works: {n}",
+    ko: "최소 필요 인원: {n}명",
+  },
+  "temp.notEnough": {
+    en: "{n} temp nurse(s) is still not enough to cover the month.",
+    ko: "임시 간호사 {n}명으로는 이번 달을 채울 수 없습니다.",
+  },
+  "temp.timedOut": {
+    en: "With {n} temp nurse(s) the solver ran out of time; it may still be possible.",
+    ko: "임시 간호사 {n}명으로는 시간이 부족했습니다. 가능할 수도 있습니다.",
+  },
+  "temp.noneWork": {
+    en: "Up to three temps is not the bottleneck. Check the nurses required per shift, the seniority requirement, and any unavailability.",
+    ko: "임시 간호사 3명까지로는 해결되지 않습니다. 교대별 필요 인원, 시니어 요건, 근무 불가 설정을 확인하세요.",
+  },
+  "temp.insufficientTitle": {
+    en: "Temp nurses will not fix this",
+    ko: "임시 간호사로는 해결되지 않습니다",
+  },
+  "temp.colTemps": { en: "Temps", ko: "임시" },
+  "temp.colShifts": { en: "Temp shifts", ko: "임시 근무 수" },
+  "temp.colCost": { en: "Est. cost", ko: "예상 비용" },
+  "temp.colErrors": { en: "Hard errors", ko: "필수 위반" },
+  "temp.colGaps": { en: "Coverage gaps", ko: "인원 부족" },
+  "temp.colOvertime": { en: "Staff overtime", ko: "정규직 초과근무" },
+  "temp.colRequests": { en: "Time off kept", ko: "휴무 반영" },
+  "temp.colDates": { en: "Days needed", ko: "필요 날짜" },
+  "temp.usedN": { en: "{n} used", ko: "{n}명 사용" },
+  "temp.usedOfAllowed": {
+    en: "{used} of {allowed} used",
+    ko: "{allowed}명 중 {used}명 사용",
+  },
+  "temp.datesAreSpec": {
+    en: "The days listed are what you would be hiring for. Pick a row to preview that schedule.",
+    ko: "표시된 날짜가 실제 고용해야 하는 날짜입니다. 행을 선택하면 해당 근무표를 볼 수 있습니다.",
+  },
+  "toast.appliedTemps": {
+    en: "Schedule applied and {n} temp nurse(s) added to the ward.",
+    ko: "근무표가 적용되고 임시 간호사 {n}명이 병동에 추가되었습니다.",
+  },
+
+  // === Notifications ===
+  "notif.title": { en: "Notifications", ko: "알림" },
+  "notif.none": { en: "Nothing new.", ko: "새로운 알림이 없습니다." },
+  "notif.dayOffApproved": {
+    en: "Your time off from {start} to {end} was approved.",
+    ko: "{start}부터 {end}까지의 휴무가 승인되었습니다.",
+  },
+  "notif.dayOffDenied": {
+    en: "Your time off from {start} to {end} was denied.",
+    ko: "{start}부터 {end}까지의 휴무가 거부되었습니다.",
+  },
+  "notif.dayOffReopened": {
+    en: "The decision on your time off from {start} to {end} was reopened.",
+    ko: "{start}부터 {end}까지의 휴무 결정이 다시 검토 중입니다.",
+  },
 
   // === Nurse-side requests ===
   "pref.requestTitle": { en: "Request days off", ko: "휴무 신청" },

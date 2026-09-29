@@ -5,6 +5,8 @@ export interface DepartmentNurse {
   id: string;
   name: string;
   department: string | null;
+  /** So a nurse's team view marks temps the same way the manager's grid does. */
+  employment_type: string | null;
 }
 
 export function useDepartmentNurses() {

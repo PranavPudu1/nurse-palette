@@ -56,6 +56,8 @@ export default {
           "night-foreground": "hsl(var(--shift-night-foreground))",
           off: "hsl(var(--shift-off))",
           "off-foreground": "hsl(var(--shift-off-foreground))",
+          timeoff: "hsl(var(--shift-timeoff))",
+          "timeoff-foreground": "hsl(var(--shift-timeoff-foreground))",
         },
         grid: {
           border: "hsl(var(--grid-border))",

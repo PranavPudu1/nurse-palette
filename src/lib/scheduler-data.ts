@@ -3,6 +3,14 @@ export type ShiftType = "D" | "E" | "N" | "X";
 export interface Nurse {
   id: string;
   name: string;
+  /**
+   * Pill shown next to the name. "phantom" is a temp the optimizer invented for
+   * a what-if variant, which has no database row yet.
+   */
+  badge?: "temp" | "phantom";
+  /** 1-indexed day-of-month employment window; days outside it render muted. */
+  availableFrom?: number;
+  availableUntil?: number;
 }
 
 export interface ScheduleData {

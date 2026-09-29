@@ -10,6 +10,7 @@ import { NursePreferencesPanel } from "@/components/NursePreferencesPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CalendarDays, Users, LogOut, Settings2 } from "lucide-react";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useLang } from "@/lib/i18n";
 
 const now = new Date();
@@ -41,7 +42,11 @@ const NurseView = () => {
   );
 
   const allGridNurses = useMemo(() =>
-    departmentNurses.map(n => ({ id: n.id, name: n.name })),
+    departmentNurses.map(n => ({
+      id: n.id,
+      name: n.name,
+      badge: n.employment_type === "temp" ? ("temp" as const) : undefined,
+    })),
     [departmentNurses]
   );
 
@@ -56,6 +61,7 @@ const NurseView = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell nurseId={myNurse?.id} />
             <LanguageToggle />
             <button
               onClick={signOut}

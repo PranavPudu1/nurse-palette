@@ -2,13 +2,22 @@ import { useMemo, useState } from "react";
 import { useNurses } from "@/hooks/useNurses";
 import { useWardConfig } from "@/hooks/useWardConfig";
 import { useExclusions } from "@/hooks/useExclusions";
-import { useAllDayOffRequests, useDecideDayOffRequest, datesInRange, DayOffRequest } from "@/hooks/useDayOffRequests";
+import {
+  useAllDayOffRequests,
+  useSetTentativeDecision,
+  useCommitDecisions,
+  useRevertDecision,
+  datesInRange,
+  DayOffRequest,
+} from "@/hooks/useDayOffRequests";
 import { validateSchedule, scoreSchedule } from "@/lib/schedule-constraints";
 import type { NurseWithLevel, WardConfig } from "@/lib/schedule-constraints";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
+import { ViolationsPanel } from "@/components/ViolationsPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useLang, monthLabel } from "@/lib/i18n";
-import { Check, X, Eye, Loader2, AlertCircle, AlertTriangle } from "lucide-react";
+import { Check, X, Eye, Loader2, AlertCircle, AlertTriangle, Gavel, Minus, RotateCcw, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface PreviewSide {
   schedule: Record<string, Record<string, any>>;
@@ -26,19 +35,29 @@ type Preview =
 const STATUS_BADGE: Record<string, string> = {
   approved: "bg-green-100 text-green-700",
   denied: "bg-red-100 text-red-700",
+  pending: "bg-amber-100 text-amber-700",
 };
 
-export function RequestsPanel() {
+interface Props {
+  /** Hands the current leanings to the schedule tab, where the real schedule lives. */
+  onExplore?: (ids: string[], year: number, month: number) => void;
+}
+
+export function RequestsPanel({ onExplore }: Props = {}) {
   const { t, lang } = useLang();
   const { data: requests = [] } = useAllDayOffRequests();
   const { data: nurses = [] } = useNurses();
   const { data: wardConfigs = [] } = useWardConfig();
   const { data: exclusions = [] } = useExclusions();
-  const decide = useDecideDayOffRequest();
+  const setTentative = useSetTentativeDecision();
+  const commit = useCommitDecisions();
+  const revert = useRevertDecision();
   const [previews, setPreviews] = useState<Record<string, Preview>>({});
+  const [confirming, setConfirming] = useState<DayOffRequest[] | null>(null);
 
   const pending = requests.filter((r) => r.status === "pending");
   const decided = [...requests.filter((r) => r.status !== "pending")].reverse();
+  const leaning = pending.filter((r) => r.tentative !== null);
 
   const nurseName = useMemo(() => {
     const m: Record<string, string> = {};
@@ -47,10 +66,14 @@ export function RequestsPanel() {
   }, [nurses]);
 
   const nursesWithLevel: NurseWithLevel[] = useMemo(
-    () => nurses.map((n) => ({ id: n.id, name: n.name, level: n.level ?? 1 })),
+    () => nurses.map((n) => ({
+      id: n.id,
+      name: n.name,
+      level: n.level ?? 1,
+      badge: n.employment_type === "temp" ? ("temp" as const) : undefined,
+    })),
     [nurses]
   );
-  const gridNurses = useMemo(() => nurses.map((n) => ({ id: n.id, name: n.name })), [nurses]);
   const mappedConfigs: WardConfig[] = useMemo(
     () =>
       wardConfigs.map((c) => ({
@@ -127,11 +150,14 @@ export function RequestsPanel() {
         </span>
         <span className="ml-auto font-bold text-foreground">{t("cmp.score", { n: side.total })}</span>
       </div>
+      {/* The counts alone were not actionable - "three warnings" said nothing
+          about which three. ViolationsPanel already writes each one out. */}
+      <ViolationsPanel violations={side.violations} nurseNames={nurseName} />
       <details>
         <summary className="text-xs text-primary cursor-pointer">{t("req.viewSchedule")}</summary>
         <div className="mt-2">
           <ScheduleGrid
-            nurses={gridNurses}
+            nurses={nursesWithLevel}
             schedule={side.schedule}
             year={year}
             month={month}
@@ -143,12 +169,80 @@ export function RequestsPanel() {
     </div>
   );
 
+  const leanButton = (
+    r: DayOffRequest,
+    value: "approve" | "deny" | null,
+    icon: React.ReactNode,
+    label: string,
+    activeCls: string
+  ) => {
+    const active = r.tentative === value;
+    return (
+      <button
+        onClick={() => setTentative.mutate({ requestId: r.id, tentative: value })}
+        disabled={setTentative.isPending}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border transition-colors disabled:opacity-50 ${
+          active ? activeCls : "border-border bg-card text-muted-foreground hover:bg-accent"
+        }`}
+      >
+        {icon} {label}
+      </button>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">{t("req.title")}</h2>
         <p className="text-sm text-muted-foreground">{t("req.subtitle")}</p>
       </div>
+
+      {/* Where the two stages are explained, once, rather than per request. */}
+      {pending.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 rounded-md bg-muted/60 border border-border text-sm">
+          <span className="text-muted-foreground">
+            {t("req.tallyLeaning", {
+              approve: pending.filter((r) => r.tentative === "approve").length,
+              deny: pending.filter((r) => r.tentative === "deny").length,
+              undecided: pending.filter((r) => r.tentative === null).length,
+            })}
+          </span>
+          <Tooltip delayDuration={100}>
+            <TooltipTrigger asChild>
+              <span className="cursor-help"><Info className="w-3.5 h-3.5 text-muted-foreground/70" /></span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[280px] text-xs">
+              {t("req.exploreHelp")}
+            </TooltipContent>
+          </Tooltip>
+          {onExplore && (
+            <button
+              onClick={() => {
+                const assumed = pending.filter((r) => r.tentative === "approve");
+                // Follow the requests actually being explored; fall back to the
+                // oldest pending one when nothing has been leaned on yet.
+                const anchor = assumed[0] ?? pending[0];
+                onExplore(
+                  assumed.map((r) => r.id),
+                  parseInt(anchor.start_date.slice(0, 4), 10),
+                  parseInt(anchor.start_date.slice(5, 7), 10) - 1
+                );
+              }}
+              className="text-primary hover:underline font-medium"
+            >
+              {t("req.exploreOnSchedule")}
+            </button>
+          )}
+          <button
+            onClick={() => setConfirming(leaning)}
+            disabled={leaning.length === 0 || commit.isPending}
+            title={leaning.length === 0 ? t("req.noLeanings") : undefined}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+          >
+            <Gavel className="w-4 h-4" /> {t("req.recordFinalN", { n: leaning.length })}
+          </button>
+        </div>
+      )}
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold">{t("req.pending")} ({pending.length})</h3>
@@ -170,7 +264,14 @@ export function RequestsPanel() {
                       {t("req.submitted", { date: r.created_at.slice(0, 10) })}
                     </div>
                   </div>
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    {/* Exploration, not decision: these only move what-if schedules. */}
+                    {leanButton(r, "approve", <Check className="w-3.5 h-3.5" />, t("req.exploreApprove"),
+                      "border-primary bg-primary/10 text-primary")}
+                    {leanButton(r, "deny", <X className="w-3.5 h-3.5" />, t("req.exploreDeny"),
+                      "border-destructive bg-destructive/10 text-destructive")}
+                    {leanButton(r, null, <Minus className="w-3.5 h-3.5" />, t("req.exploreClear"),
+                      "border-border bg-muted text-foreground")}
                     <button
                       onClick={() => runPreview(r)}
                       disabled={pv?.state === "loading"}
@@ -180,18 +281,12 @@ export function RequestsPanel() {
                       {t("req.preview")}
                     </button>
                     <button
-                      onClick={() => decide.mutate({ request: r, approve: true })}
-                      disabled={decide.isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                      onClick={() => setConfirming([r])}
+                      disabled={r.tentative === null || commit.isPending}
+                      title={r.tentative === null ? t("req.noLeanings") : undefined}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
                     >
-                      <Check className="w-4 h-4" /> {t("req.approve")}
-                    </button>
-                    <button
-                      onClick={() => decide.mutate({ request: r, approve: false })}
-                      disabled={decide.isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 disabled:opacity-50 transition-colors"
-                    >
-                      <X className="w-4 h-4" /> {t("req.deny")}
+                      <Gavel className="w-4 h-4" /> {t("req.recordFinal")}
                     </button>
                   </div>
                 </div>
@@ -222,16 +317,75 @@ export function RequestsPanel() {
       <div className="space-y-2">
         <h3 className="text-sm font-semibold">{t("req.history")} ({decided.length})</h3>
         {decided.map((r) => (
-          <div key={r.id} className="flex items-center gap-3 text-sm py-1.5 px-2 rounded hover:bg-muted/50">
+          <div key={r.id} className="flex flex-wrap items-center gap-3 text-sm py-1.5 px-2 rounded hover:bg-muted/50">
             <span className="font-medium">{nurseName[r.nurse_id] ?? r.nurse_id.slice(0, 8)}</span>
             <span className="text-muted-foreground">{r.start_date} → {r.end_date}</span>
             <span className="text-muted-foreground truncate">{r.reason || ""}</span>
+            {r.decided_at && (
+              <span className="text-xs text-muted-foreground/70">
+                {t("req.decidedOn", { date: r.decided_at.slice(0, 10) })}
+              </span>
+            )}
             <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[r.status]}`}>
               {r.status === "approved" ? t("req.approved") : t("req.denied")}
             </span>
+            <button
+              onClick={() => {
+                if (confirm(t("req.confirmRevert", {
+                  name: nurseName[r.nurse_id] ?? "",
+                  start: r.start_date,
+                  end: r.end_date,
+                }))) revert.mutate(r.id);
+              }}
+              disabled={revert.isPending}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> {t("req.changeDecision")}
+            </button>
           </div>
         ))}
       </div>
+
+      {/* Committing notifies people, so it names exactly who and what first. */}
+      {confirming && confirming.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-card border border-border shadow-lg p-5 space-y-4">
+            <h3 className="text-base font-semibold">{t("req.confirmTitle")}</h3>
+            <p className="text-sm text-muted-foreground">{t("req.confirmBody")}</p>
+            <ul className="space-y-1 text-sm max-h-48 overflow-auto">
+              {confirming.map((r) => (
+                <li key={r.id} className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold ${
+                    r.tentative === "approve" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  }`}>
+                    {r.tentative === "approve" ? t("req.approved") : t("req.denied")}
+                  </span>
+                  <span className="font-medium">{nurseName[r.nurse_id] ?? r.nurse_id.slice(0, 8)}</span>
+                  <span className="text-muted-foreground">{r.start_date} → {r.end_date}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirming(null)}
+                className="px-3 py-2 text-sm rounded-md bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
+              >
+                {t("req.confirmCancel")}
+              </button>
+              <button
+                onClick={() => {
+                  commit.mutate(confirming.map((r) => r.id));
+                  setConfirming(null);
+                }}
+                disabled={commit.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                <Gavel className="w-4 h-4" /> {t("req.confirmGo")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
