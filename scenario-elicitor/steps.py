@@ -11,6 +11,8 @@ comparisons -> review, submit, download or email the benchmark.
 """
 from __future__ import annotations
 
+import difflib
+import html as html_mod
 import os
 import random
 
@@ -64,6 +66,29 @@ def _mock_note(data: dict) -> None:
         st.caption("Demo mode: no API key found, so these are placeholder results.")
 
 
+def _diff_html(text: str, other: str) -> str:
+    """`text`, HTML-escaped, with the words that differ from `other` softly
+    highlighted. Word-level rather than character-level so the marks land on
+    readable units; both walls of text share their start and end, which is
+    exactly why Whitney could not see the differences."""
+    tw = (text or "").split()
+    ow = (other or "").split()
+    if not tw or not ow:
+        return html_mod.escape(text or "")
+    out = []
+    sm = difflib.SequenceMatcher(None, ow, tw, autojunk=False)
+    for tag, _i1, _i2, j1, j2 in sm.get_opcodes():
+        if j1 == j2:
+            continue
+        seg = html_mod.escape(" ".join(tw[j1:j2]))
+        if tag == "equal":
+            out.append(seg)
+        else:
+            out.append(f'<mark style="background:{ACCENT}66;'
+                       f'border-radius:4px;padding:0 2px;">{seg}</mark>')
+    return " ".join(out)
+
+
 def _llm_failure_banner(data: dict) -> None:
     """A loud, page-level banner when a generation call failed.
 
@@ -115,6 +140,14 @@ def render_agent() -> None:
             f'<div class="np-sub">It decides what reaches your child and how things '
             f'get explained: which videos and articles come through, how questions '
             f'about the news get answered, and when you should be told.</div></div>',
+            unsafe_allow_html=True)
+        st.markdown(
+            '<div class="np-card-muted" style="margin-bottom:12px;">'
+            '<div class="np-sub">AI companies already build child-safety '
+            'systems into products like this, and this session does not '
+            'redo that work. It captures what you would add on top: the '
+            'calls that depend on your child and your values, which no '
+            'built-in default can know.</div></div>',
             unsafe_allow_html=True)
         st.caption("Next you will say who it is for and how you want it to behave.")
         return
@@ -392,8 +425,10 @@ def _render_example_chat(scenario: dict, key: str = "") -> None:
         with st.chat_message("assistant"):
             st.markdown(f"**The agent today** {provenance.icon('baseline_reply')}  \n"
                         f"{ex['ai_response']}", unsafe_allow_html=True)
-            st.caption("This is what a typical AI replies right now, before "
-                       "any rule from you.")
+            st.caption("A real, current AI model wrote this reply the way "
+                       "today's assistants answer out of the box. It is not "
+                       "a hand-written example, and no rule from you has "
+                       "shaped it yet.")
     sid = str(scenario.get("id", key or ""))
     st.markdown('<div class="np-q" style="margin-top:10px;">Was this reply '
                 'okay for your child?</div>', unsafe_allow_html=True)
@@ -543,10 +578,13 @@ def _ask_version(idx: int, k: int, scenario: dict, msg: str) -> None:
                      "reply": turns[-1]["content"]})
 
 
-def _render_thread(idx: int, label: str, scenario: dict, height: int = 240) -> None:
+def _render_thread(idx: int, label: str, scenario: dict, height: int = 240,
+                   diff_base: str = "") -> None:
     turns = _thread(idx, label, scenario)["turns"]
     if len(turns) >= 4:
         st.caption("Scroll inside the panel for the rest of the conversation.")
+    last_reply = next((t for t in reversed(turns)
+                       if t["role"] == "assistant"), None)
     with st.container(height=height, border=False):
         if not turns:
             st.caption("No conversation yet. Ask the question below.")
@@ -559,14 +597,29 @@ def _render_thread(idx: int, label: str, scenario: dict, height: int = 240) -> N
                 with st.chat_message("assistant"):
                     ikey = ("rule_reply" if (t.get("rule") or "").strip()
                             else "baseline_reply")
+                    body = t["content"]
+                    # Only the newest reply is diffed, against the leftmost
+                    # column: the differences between versions are minute
+                    # and hid in the wall of text (Winnie).
+                    if diff_base and t is last_reply:
+                        body = _diff_html(body, diff_base)
                     st.markdown(f"**{t.get('version', label)}** "
-                                f"{provenance.icon(ikey)}  \n{t['content']}",
+                                f"{provenance.icon(ikey)}  \n{body}",
                                 unsafe_allow_html=True)
                     if t.get("what_changed"):
                         st.caption(f"What this version changed: {t['what_changed']}")
 
 
-def _ui_compare_column(idx: int, k: int, scenario: dict) -> None:
+def _latest_reply(idx: int, label: str) -> str:
+    """The newest assistant reply in a version's thread, or empty."""
+    chats = st.session_state.get(f"sb_chats_{idx}") or {}
+    turns = (chats.get(label) or {}).get("turns") or []
+    return next((t.get("content", "") for t in reversed(turns)
+                 if t.get("role") == "assistant"), "")
+
+
+def _ui_compare_column(idx: int, k: int, scenario: dict,
+                       diff_base: str = "") -> None:
     """One compare column: pick a version, see its thread, ask it things."""
     ss = st.session_state
     options = ["Pick a version..."] + _vlabels(idx)
@@ -582,7 +635,7 @@ def _ui_compare_column(idx: int, k: int, scenario: dict) -> None:
                    "them side by side.")
         return
     ss[f"sb_cmpv_{idx}_{k}"] = pick
-    _render_thread(idx, pick, scenario, height=320)
+    _render_thread(idx, pick, scenario, height=320, diff_base=diff_base)
     dq = _default_question(scenario)
     if dq and not _thread(idx, pick, scenario)["turns"]:
         st.button(f"Ask the case's question", key=f"sb_dq_{idx}_{k}",
@@ -806,9 +859,9 @@ def _instruction(text: str) -> None:
                 f'{text}</div>', unsafe_allow_html=True)
 
 
-_CW_STEPS = ("Read the three conversations on the left.",
+_CW_STEPS = ("Read the conversation on the left.",
              "Answer the questions below.",
-             "Write one rule that should hold across all of them.")
+             "Write one rule that should hold in conversations like this.")
 
 
 def _cw_header(sub: int) -> None:
@@ -875,7 +928,7 @@ def _cw_done_reading(idx: int) -> None:
     if unread:
         ss[f"_flash_cw_{idx}"] = ("Open " + " and ".join(unread) + " on the "
                                   "left first; the rule you write should "
-                                  "hold across all three conversations.")
+                                  "hold across them.")
         return
     ss[f"sb_cw_{idx}"] = 1
 
@@ -1069,32 +1122,95 @@ def _theme_answer(theme: str) -> dict | None:
                  if a.get("theme") == theme), None)
 
 
-def _ensure_theme_cases(theme: str) -> list[dict]:
-    """Three cases for this theme, generated on first entry and then reused."""
+def _rubric_gaps(idx: int) -> list[str]:
+    """The rubric's weakest criteria for this theme, for gap-targeted cases.
+
+    This used to steer pairwise round 2; Min moved it earlier, into the
+    cases that appear at Score + revise and Sharpen ("right after the
+    rubric part"). Invisible to the participant by design.
+    """
+    fb = st.session_state.get(f"sb_fb_{idx}") or {}
+    return [f"{(c.get('name') or '').strip()} ({(c.get('why') or '')[:120]})"
+            for c in (fb.get("criteria") or [])
+            if int(c.get("level", 4) or 4) <= 2][:3]
+
+
+def _visible_n(theme: str, idx: int) -> int:
+    """How many cases this theme should show right now.
+
+    Stage-based: one while considering and writing, a second once the
+    first Check has run, the third on Sharpen. The thumbs-up chain
+    reveals earlier: rating case k good uncovers case k+1, which is the
+    road to the all-good skip.
+    """
+    ss = st.session_state
+    stage_based = 1
+    if ss.get(f"sb_fb_{idx}"):
+        stage_based = 2
+    if _stage(idx) >= 2:
+        stage_based = 3
+    thumbs = 1
+    for c in _theme_cases(theme):
+        if ss.get(f"sb_crate_{str(c.get('id'))}") == 1:
+            thumbs += 1
+        else:
+            break
+    return min(wizard.N_CASES_PER_THEME, max(stage_based, thumbs))
+
+
+def _ensure_cases(theme: str, want_total: int, trigger: str = "") -> list[dict]:
+    """Make sure this theme has want_total cases, generating one at a time.
+
+    Cases used to arrive three at once, which Whitney found overwhelming.
+    Now case 1 exists at theme open, case 2 lands after the first Check
+    and case 3 on entering Sharpen (or earlier via the thumbs-up chain),
+    each generated at that moment so it can target the rubric's current
+    gaps.
+    """
     ss = st.session_state
     if ss.sb_scenarios is None:
         ss.sb_scenarios = []
     have = _theme_cases(theme)
-    want = wizard.N_CASES_PER_THEME - len(have)
-    if want > 0:
+    while len(have) < min(want_total, wizard.N_CASES_PER_THEME):
         titles = [s["title"] for s in ss.sb_scenarios]
-        with st.spinner("Writing cases for this theme..."):
+        gaps = _rubric_gaps(_theme_index(theme)) if have else []
+        with st.spinner("Writing another case..." if have
+                        else "Writing a case for this theme..."):
             data = llm.expand_theme(ss.sb_agent, _does(), "",
-                                    ss.sb_audience, theme, titles, want)
+                                    ss.sb_audience, theme, titles, 1,
+                                    gaps=gaps)
         _llm_failure_banner(data)
         # theme= forces the category, so a near-miss from the model cannot land
         # a case in a bucket no theme card can reach.
-        _append_new(_ingest_scenarios(data, theme=theme))
+        new = _ingest_scenarios(data, theme=theme)
+        for c in new:
+            c["gap_hint"] = gaps
+        _append_new(new)
+        store.log_event(_rid(), "themes", "case_revealed",
+                        {"theme": theme, "n": len(have) + 1,
+                         "trigger": trigger, "gap_targeted": bool(gaps)})
+        prev = len(have)
         have = _theme_cases(theme)
+        if len(have) == prev:
+            break   # generation failed; do not loop forever
     return have
 
 
+def _ensure_theme_cases(theme: str) -> list[dict]:
+    """The theme's first case, generated on first entry and then reused."""
+    return _ensure_cases(theme, 1, trigger="open")
+
+
 def _all_cases_up(theme: str) -> bool:
-    """All of the theme's cases rated thumbs-up (unlocks the skip offer)."""
+    """All three cases rated thumbs-up (unlocks the skip offer).
+
+    Requires the full set: with progressive reveal, one thumbed-up case
+    would otherwise offer the skip before cases 2 and 3 even exist.
+    """
     ss = st.session_state
     cases = _theme_cases(theme)
-    return bool(cases) and all(
-        ss.get(f"sb_crate_{str(c.get('id'))}") == 1 for c in cases)
+    return (len(cases) >= wizard.N_CASES_PER_THEME and all(
+        ss.get(f"sb_crate_{str(c.get('id'))}") == 1 for c in cases))
 
 
 def _skip_theme(theme: str) -> None:
@@ -1384,6 +1500,11 @@ def _ui_cases(cases: list[dict], idx: int = 0) -> None:
     # open, and Winnie would have pressed Done reading after seeing only
     # Case 1. Every visit lands in sb_cread_{idx}, which gates Done reading.
     labels = [f"Case {i + 1}" for i in range(len(cases))]
+    seen = int(ss.get(f"sb_cseen_{idx}", 0) or 0)
+    if len(cases) > max(seen, 1):
+        st.info("A new case appeared. Does your rule still hold for it?")
+        ss[f"w_sb_case_{idx}"] = labels[-1]   # jump straight to it
+    ss[f"sb_cseen_{idx}"] = len(cases)
     pick = st.segmented_control("Case", labels, key=f"w_sb_case_{idx}",
                                 default=labels[0],
                                 label_visibility="collapsed")
@@ -1470,8 +1591,8 @@ def _ui_rule(idx: int, height: int = 200) -> None:
     _kept_text(
         f"sb_answer_{idx}", "Your rule", height=height,
         label_visibility="collapsed",
-        placeholder="One rule that should hold across all three of these "
-                    "conversations. Say what the AI should do, what it should "
+        placeholder="One rule that should hold in conversations like this. "
+                    "Say what the AI should do, what it should "
                     "not do, and how to handle the hard part.")
 
 
@@ -1695,6 +1816,8 @@ def _ui_save(theme: str, cases: list[dict], idx: int) -> None:
         st.caption(_needs(len(missing), len(_question_slots(idx, "b"))))
     elif not final:
         st.caption("Pick your final version to continue.")
+    elif any(k.startswith(f"{theme}:") for k in (ss.get("sb_cmp") or {})):
+        st.caption("Saving restarts the close calls with your current rule.")
     _show_flash(f"_flash_save_{idx}")
 
 
@@ -1757,10 +1880,18 @@ def _workspace(idx: int, theme: str, cases: list[dict], scenario: dict) -> None:
         _section_step(1, "Compare the versions you wrote")
         _instruction("Pick a version in each column and ask it questions. "
                      "Original is the agent with no rule at all.")
+        sels = [ss.get(f"sb_cmpv_{idx}_{k}") or "" for k in range(3)]
+        base_label = next((s for s in sels if s and _latest_reply(idx, s)), "")
+        base_text = _latest_reply(idx, base_label) if base_label else ""
+        if base_text and sum(1 for s in sels if s) > 1:
+            st.caption("Highlights show where a reply differs from the "
+                       "leftmost column.")
         c0, c1, c2 = st.columns(3, gap="medium")
         for k, col in enumerate((c0, c1, c2)):
             with col, st.container(border=True):
-                _ui_compare_column(idx, k, scenario)
+                _ui_compare_column(idx, k, scenario,
+                                   diff_base=("" if sels[k] == base_label
+                                              else base_text))
         st.divider()
         _section_step(2, "Update your rule, if you want")
         _instruction("Edit it here and save it as a new version, then "
@@ -1861,13 +1992,27 @@ def _render_theme_workspace() -> None:
 
     _handle_workspace_actions(idx, scenario, cases)
 
+    # Progressive reveal: generate the next case the moment it becomes
+    # visible, so it can be aimed at the rubric's current gaps.
+    want = _visible_n(theme, idx)
+    if want > len(cases):
+        trig = ("sharpen" if _stage(idx) >= 2
+                else "check" if ss.get(f"sb_fb_{idx}") else "thumbs")
+        cases = _ensure_cases(theme, want, trigger=trig)
+
     revisiting = theme in (ss.get("sb_themes_done") or [])
     count = (f"Revising a finished theme" if revisiting and
              n_done >= wizard.N_THEMES else
              f"Theme {min(n_done + 1, wizard.N_THEMES)} of {wizard.N_THEMES}")
     header(meta["name"], f"{count}. {meta['blurb']}")
-    st.button("Back to the themes", key="sb_back_themes", type="secondary",
-              on_click=_close_theme)
+    nav1, nav2, _ = st.columns([1, 1.4, 2.6], gap="small")
+    nav1.button("Back to the themes", key="sb_back_themes", type="secondary",
+                on_click=_close_theme)
+    if any(k.startswith(f"{theme}:") for k in (ss.get("sb_cmp") or {})):
+        nav2.button("Return to your close calls", key="sb_to_rounds",
+                    type="secondary",
+                    help="Continue the rounds where you left off.",
+                    on_click=_workspace_to_rounds)
     _workspace(idx, theme, cases, scenario)
 
 
@@ -1999,29 +2144,20 @@ def _theme_cmps(theme: str, rnd: int) -> list[dict]:
         return []
     cases = _theme_cases(theme)
     anchor = cases[(rnd - 1) % len(cases)] if cases else ans
-    idx = _theme_index(theme)
-    fb = ss.get(f"sb_fb_{idx}") or {}
-    # Rubric-gap steer by round: gentle in round 1, one of round 2's two
-    # close calls is REQUIRED to target a gap (that is the round where the
-    # rule can still change), and round 3 ignores the rubric entirely so
-    # the scored round stays an unbiased sample (user direction, Sep 22).
-    gaps = [] if rnd >= 3 else [
-        f"{(c.get('name') or '').strip()} ({(c.get('why') or '')[:120]})"
-        for c in (fb.get("criteria") or [])
-        if int(c.get("level", 4) or 4) <= 2][:3]
+    # The rubric-gap steer moved out of the rounds and into the cases that
+    # appear at Score + revise and Sharpen (Min, Sep 29: "much earlier,
+    # right after the rubric part"), so every round is a clean sample.
     used = [c.get("dimension", "") for r in ss.sb_cmp.values() for c in r]
     prior_msgs = [c.get("user_message", "") for r in ss.sb_cmp.values()
                   for c in r if c.get("theme") == theme]
     out = []
     with st.spinner("Building a couple of close calls..."):
         for k in range(N_THEME_ROUND):
-            force = bool(gaps) and rnd == 2 and k == 0
             data = llm.confirm_pairwise(ss.sb_agent, _does(), "",
                                         ss.sb_audience, anchor,
                                         _theme_rule(theme),
                                         avoid=used, edge=(rnd > 1),
-                                        avoid_questions=prior_msgs,
-                                        gaps=gaps, force_gap=force)
+                                        avoid_questions=prior_msgs)
             opts = list(data.get("options") or [])
             while len(opts) < 2:
                 opts.append({"label": f"Option {len(opts) + 1}",
@@ -2043,7 +2179,6 @@ def _theme_cmps(theme: str, rnd: int) -> list[dict]:
                 "instance": (data.get("instance") or "").strip(),
                 "user_message": (data.get("user_message") or "").strip(),
                 "dimension": dim, "options": opts[:2], "swapped": swapped,
-                "gap_targeted": force,
                 "_mock": data.get("_mock"), "_error": data.get("_error")})
     ss.sb_cmp[key] = out
     return out
@@ -2076,6 +2211,7 @@ def _theme_commit(cmp: dict, i: int) -> None:
     choice = ss.get(f"sb_pick_{cmp['id']}")
     if not choice:
         return
+    sync_widget_mirrors()
     _record_pick(cmp, choice, i)
     if cmp["round"] == 1:
         ss.sb_tcidx = ss.get("sb_tcidx", 0) + 1
@@ -2114,6 +2250,17 @@ def _theme_after_reveal(cmp: dict, i: int) -> None:
                                                    "at_stake": ""},
                            theme=theme, case_ids=[c["id"] for c in cases])
     ss.sb_tcidx = ss.get("sb_tcidx", 0) + 1
+
+
+def _rounds_to_workspace() -> None:
+    """From the rounds back to the workspace, touching nothing else."""
+    st.session_state.sb_tphase = "write"
+
+
+def _workspace_to_rounds() -> None:
+    """Back into the rounds exactly where they left off. No reset: the
+    Save button is the deliberate way to restart them fresh."""
+    st.session_state.sb_tphase = "test"
 
 
 def _theme_advance_round() -> None:
@@ -2183,6 +2330,10 @@ def _render_theme_test() -> None:
 
     header(theme, f"Round {rnd} of {_LAST_ROUND}. Close call {i + 1} of "
                   f"{len(cmps)}. {_THEME_ROUND_INTRO[rnd]}")
+    st.button("Back to the workspace", key="sb_rounds_back", type="secondary",
+              help="Look at your versions and cases again. Your place in "
+                   "the rounds is kept.",
+              on_click=_rounds_to_workspace)
     if rnd == 1 and i == 0:
         _instruction("Three quick rounds of close calls. Each one checks "
                      "whether the rule you wrote chooses the way you would.")
@@ -2282,6 +2433,7 @@ def _record_pick(cmp: dict, choice: str, i: int) -> None:
         "option_a": cmp["options"][0], "option_b": cmp["options"][1],
         "choice": choice,
         "note": (ss.get(f"sb_cnote_{rnd}_{i}") or "").strip(),
+        "note_other": (ss.get(f"sb_cnote_o_{rnd}_{i}") or "").strip(),
     }
     prev = _row_for(cmp["id"])
     if prev is not None:
@@ -2304,9 +2456,14 @@ def _render_options(cmp: dict, highlight: str = "", mine: str = "") -> None:
     landed: picking no longer jumps to the next screen, so without this there
     would be no feedback at all.
     """
+    a_text = cmp["options"][0].get("text", "")
+    b_text = cmp["options"][1].get("text", "")
+    st.caption("Highlighted words are where the two replies differ.")
     col_a, col_b = st.columns(2, gap="medium")
     for col, letter in ((col_a, "A"), (col_b, "B")):
         opt = cmp["options"][0 if letter == "A" else 1]
+        body = _diff_html(opt.get("text", ""),
+                          b_text if letter == "A" else a_text)
         picked = highlight == letter
         is_mine = (not highlight) and mine == letter
         border = "#2E7D4F" if picked else (PRIMARY if is_mine else BORDER)
@@ -2321,7 +2478,7 @@ def _render_options(cmp: dict, highlight: str = "", mine: str = "") -> None:
                 f'align-items:center;gap:8px;margin-bottom:4px;">'
                 f'<span style="font-weight:700;color:{FG};">{opt["label"]}</span>'
                 f'{tag}</div>'
-                f'<div class="np-sub">{opt["text"]}</div></div>',
+                f'<div class="np-sub">{body}</div></div>',
                 unsafe_allow_html=True)
 
 
@@ -2364,6 +2521,12 @@ def _render_pick_controls(cmp: dict, rnd: int, i: int) -> str:
     if chosen:
         st.text_input("Why this one?", key=f"sb_cnote_{rnd}_{i}",
                       placeholder="what tipped it")
+        # A separate field, not a reworded heading: Min wants why-chose and
+        # why-not parseable apart (Whitney kept explaining what was wrong
+        # with the reply she did NOT pick).
+        st.text_input("What made you pass on the other one? (optional)",
+                      key=f"sb_cnote_o_{rnd}_{i}",
+                      placeholder="what ruled the other one out")
     return chosen
 
 

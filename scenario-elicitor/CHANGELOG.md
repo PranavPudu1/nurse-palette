@@ -8,6 +8,34 @@ Deployment ids come from `railway deployment list` run in `scenario-elicitor/`.
 
 ---
 
+## v0.11 — 2026-09-29 — one case at a time, gap logic moves earlier
+
+From the Sep 29 meeting with Min.
+
+- **Progressive cases**: a theme opens with ONE case; the second appears
+  right after the first rubric Check and the third on entering Sharpen,
+  each generated at that moment so it can quietly target the rubric's
+  weakest criteria. Thumbs-up on a case reveals the next one immediately,
+  which is the road to the all-good skip (now requiring all three).
+- **Rounds are clean**: the gap steer left pairwise round 2 entirely;
+  rotation, question variety, and the left/right shuffle stay.
+- **Why-not field**: picks now carry a second optional box, "What made
+  you pass on the other one?", recorded separately (note_other) for
+  clean parsing.
+- **Diff highlighting**: changed words are marked between the two
+  pairwise options, and compare-column replies highlight what differs
+  from the leftmost column's reply.
+- **Two-way navigation**: Back to the workspace from the rounds, Return
+  to your close calls from the workspace, no reset either way; only
+  Save restarts the rounds.
+- **Instruction texts**: the example replies are explicitly real,
+  current-model outputs, and the agent screen frames the session as what
+  a parent adds on top of companies' built-in child-safety systems.
+
+Deployment: DEPLOY_ID.
+
+---
+
 ## v0.10 — 2026-09-22 — the Winnie round
 
 Everything here traces to the Sep 22 think-aloud with Winnie and Min.

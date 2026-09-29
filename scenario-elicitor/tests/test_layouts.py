@@ -68,13 +68,13 @@ idx = ss["sb_idx"]
 check(not any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
       "no rule box before the read sub-step is done")
 check(next_stage(at) == "none", "no Next before the sub-steps finish")
-click(at, "Done reading")
-check(sget(ss, f"sb_cw_{idx}", 0) == 0,
-      "Done reading blocked until all cases were opened")
-ss[f"sb_cread_{idx}"] = [0, 1, 2]
+def theme_cases(theme):
+    return [s for s in ss["sb_scenarios"] if s.get("category") == theme]
+check(len(theme_cases(ss["sb_theme"])) == 1,
+      "the theme opens with a single case (progressive reveal)")
 check(click(at, "Done reading"), "Done reading clickable")
 check(sget(ss, f"sb_cw_{idx}") == 1,
-      "Done reading advances once all cases were opened")
+      "Done reading advances once the visible case was read")
 check(click(at, "Done answering"), "Done answering exists")
 check(ss[f"sb_cw_{idx}"] == 1, "answering gate holds while questions blank")
 for w in [w for w in at.text_area
@@ -101,6 +101,8 @@ check(any("rubric" in (l or "").lower() for l in labels),
       "the rubric is viewable on the score stage")
 click(at, "Check my answer")
 check(not at.exception, f"check ran ({at.exception})")
+check(len(theme_cases(ss["sb_theme"])) == 2,
+      "the first Check reveals a second case")
 
 # Still on Score + revise: edit the rule and save it as a new version.
 at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT + " Ask me on close calls.").run()
@@ -108,6 +110,8 @@ click(at, "Save as new version")
 check(len(sget(ss, f"sb_vers_{idx}") or []) == 2, "the edit saved as v2")
 check(sget(ss, f"sb_vsel_{idx}") == "v2", "the dropdown selected v2")
 check(next_stage(at) == "moved", "onward to Sharpen")
+check(len(theme_cases(ss["sb_theme"])) == 3,
+      "Sharpen reveals the third case")
 
 # Stage 2: Sharpen. Rule card, questions, then the editable box; never blocks.
 check(any(w.key == f"w_sb_answer_{idx}" for w in at.text_area),
@@ -173,9 +177,15 @@ for b in at.button:
     if b.key == f"sb_open_{theme2}":
         b.click().run(); break
 check(ss["sb_theme"] == theme2, "second theme opened")
-t2cases = [s for s in ss["sb_scenarios"] if s.get("category") == theme2]
-check(len(t2cases) == 3, "second theme generated its cases")
-for c in t2cases:
+check(len(theme_cases(theme2)) == 1, "second theme opens with one case")
+# Thumbs-up chain: rating each case good reveals the next.
+for step in (2, 3):
+    for c in theme_cases(theme2):
+        ss[f"sb_crate_{c['id']}"] = 1
+    at.run()
+    check(len(theme_cases(theme2)) == step,
+          f"thumbs-up chain revealed case {step}")
+for c in theme_cases(theme2):
     ss[f"sb_crate_{c['id']}"] = 1
 at.run()
 check(any(b.label == "Skip this topic" for b in at.button),

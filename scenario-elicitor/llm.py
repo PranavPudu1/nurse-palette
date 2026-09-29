@@ -154,7 +154,8 @@ def _mock_case(theme: str, does: str, audience: str, i: int) -> dict:
 
 
 def expand_theme(agent: str, does: str, description: str, audience: str, theme: str,
-                 existing_titles: list[str], n: int = 3) -> dict:
+                 existing_titles: list[str], n: int = 3,
+                 gaps: list[str] | None = None) -> dict:
     base = len(existing_titles)
     scenarios = []
     for j in range(n):
@@ -166,7 +167,7 @@ def expand_theme(agent: str, does: str, description: str, audience: str, theme: 
     mock = {"scenarios": scenarios}
     return _call(
         prompts.expand_theme_messages(agent, does, description, audience, theme,
-                                      existing_titles, n),
+                                      existing_titles, n, gaps=gaps),
         prompts.SCENARIOS_SCHEMA, mock, temperature=0.8)
 
 

@@ -445,8 +445,15 @@ def is_kids_domain(agent: str) -> bool:
 
 def expand_theme_messages(agent: str, does: str, description: str, audience: str,
                           theme: str, existing_titles: list[str],
-                          n: int) -> list[dict]:
+                          n: int, gaps: list[str] | None = None) -> list[dict]:
     avoid = "; ".join(t for t in existing_titles if t) or "(none yet)"
+    gap_line = ""
+    if gaps:
+        gap_line = (" The person has already written a rule for this theme, "
+                    "and it is currently weakest on: " + "; ".join(gaps) +
+                    ". Write the situation so that exactly those gaps are "
+                    "what matter in it, without naming the rubric or the "
+                    "rule.")
     system = (
         f"You help a person set preferences for how an AI agent should behave. The "
         f"agent: {agent.strip()}. What it does: {does.strip()}."
@@ -456,7 +463,8 @@ def expand_theme_messages(agent: str, does: str, description: str, audience: str
         "but consequential cases, edge cases, and ways the agent could be misused, "
         "so the person sees cases they have not considered. Each must be a specific, "
         f"concrete incident. Use '{theme.strip()}' as the category and prefer kind "
-        f"edge_case or surprising.\n\n{_CASE_FIELDS}\n{_CASE_QUALITY}\nDo not use em dashes."
+        f"edge_case or surprising.{gap_line}"
+        f"\n\n{_CASE_FIELDS}\n{_CASE_QUALITY}\nDo not use em dashes."
     )
     user = (
         "How the person described what they want (may be brief or empty):\n"

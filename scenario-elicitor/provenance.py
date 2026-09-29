@@ -81,7 +81,9 @@ INFO: dict[str, dict[str, str]] = {
                   "is about. Do not judge the answer or suggest a rewrite.",
     },
     "baseline_reply": {
-        "what": "What the AI says today, before you have told it anything.",
+        "what": "A real, current AI model's reply, answering the way "
+                "today's assistants do out of the box. Not a hand-written "
+                "example; no rule from you has shaped it yet.",
         "source": "This is the starting point, so you can see what actually "
                   "changes once you write a rule. It is not a bare, unguarded "
                   "model: it already behaves the way these products behave for "

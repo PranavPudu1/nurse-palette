@@ -92,6 +92,12 @@ with no source is worth knowing about too.
 | Theme cards carry a concrete example | The topic menu | Descriptions alone took too long to decode; one for-example line per card | Winnie think-aloud (Sep 22) |
 | The rubric sits above the score bars | Score + revise | It was ignored at the bottom; anyone meant to learn from it has to at least see it | Winnie think-aloud (Sep 22) |
 | Reflection questions must be concrete for the child's age | Behind every generated question | Abstract perspective-questions and age-hypotheticals confused a tester; assumptions and consequences questions helped her | Winnie think-aloud (Sep 22) |
+| Cases arrive one at a time across the stages | The case panel | Three at once was overwhelming; case 1 at open, case 2 after the first Check, case 3 at Sharpen, revealed early by the thumbs-up chain | Min meeting (Sep 29) |
+| Later cases are generated to target the rubric's gaps | Cases 2 and 3, invisibly | The gap steer moved out of pairwise round 2 into the moment right after the rubric; every round is now a clean sample | Min meeting (Sep 29) |
+| Pairwise picks carry a separate why-not field | The rounds, after picking | A tester kept explaining what was wrong with the reply she did not pick; a separate field keeps the two parseable apart | Min meeting (Sep 29) |
+| Differences are highlighted on both comparison surfaces | Pairwise options and the compare columns | The replies share their start and end, so minute differences hid in the wall of text; changed words are marked | Min meeting (Sep 29) |
+| The rounds and the workspace are a two-way door | Back to the workspace / Return to your close calls | Min hit a dead end trying to revisit the versions mid-rounds; only Save restarts the rounds, deliberately | Min meeting (Sep 29) |
+| The intro names existing company safeguards | The agent screen | The session is framed as what a parent adds on top of built-in protections, complementary rather than redundant | Min meeting (Sep 29) |
 
 ## Study mechanics
 

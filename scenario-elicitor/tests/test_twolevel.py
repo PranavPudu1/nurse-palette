@@ -70,10 +70,9 @@ for n in range(wizard.N_THEMES):
     # revealed sub-steps: read -> answer -> write; Next only at the end
     assert not [b for b in at.button if b.label.startswith("Next:")], \
         "Next visible before the sub-steps finished"
-    click(at, "Done reading")
-    assert (f"sb_cw_{idx}" not in ss) or ss[f"sb_cw_{idx}"] == 0, \
-        "Done reading advanced before all cases were opened"
-    at.session_state[f"sb_cread_{idx}"] = [0, 1, 2]
+    assert len([s for s in ss["sb_scenarios"]
+                if s.get("category") == theme]) == 1, \
+        "theme opens with a single case (progressive reveal)"
     assert click(at, "Done reading"), "Done reading missing"
     click(at, "Done answering")
     assert ss[f"sb_cw_{idx}"] == 1, "advanced with questions unanswered"
@@ -87,6 +86,9 @@ for n in range(wizard.N_THEMES):
         "Next advanced with no rule written"
     at.text_area(key=f"w_sb_answer_{idx}").set_value(DRAFT).run()
     to_stage(at, 3)   # -> score, -> sharpen, -> test
+    assert len([s for s in ss["sb_scenarios"]
+                if s.get("category") == theme]) == 3, \
+        "all three cases exist by the Test stage"
     assert click(at, "Save this rule and test it"), "save blocked"
     assert not at.exception, at.exception
     assert ss["sb_tphase"] == "test" and ss["sb_tround"] == 1
@@ -100,6 +102,7 @@ for n in range(wizard.N_THEMES):
         assert cmps[0]["scenario_id"] == tcases[(rnd - 1) % len(tcases)]["id"], \
             "round anchors rotate across the theme's cases"
         assert "swapped" in cmps[0], "left/right shuffle recorded"
+        assert "gap_targeted" not in cmps[0], "rounds are clean of gap steer"
         for _ in range(len(cmps)):
             j = ss["sb_tcidx"]
             body = md(at)
@@ -108,7 +111,10 @@ for n in range(wizard.N_THEMES):
             assert click(at, "Prefer left"), f"pick r{rnd}"
             assert ss["sb_tcidx"] == before, "pick auto-advanced"
             at.text_input(key=f"sb_cnote_{rnd}_{j}").set_value("gentler").run()
+            at.text_input(key=f"sb_cnote_o_{rnd}_{j}").set_value("too blunt").run()
             assert click(at, "Continue"), f"continue r{rnd}"
+            assert ss["sb_confirm"][-1].get("note_other") == "too blunt", \
+                "the why-not field is recorded on the pick row"
             if rnd == 1:
                 assert ss["sb_tcidx"] == before + 1, "round 1 should advance"
             else:
