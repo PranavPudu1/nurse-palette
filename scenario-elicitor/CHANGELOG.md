@@ -32,7 +32,7 @@ From the Sep 29 meeting with Min.
   current-model outputs, and the agent screen frames the session as what
   a parent adds on top of companies' built-in child-safety systems.
 
-Deployment: DEPLOY_ID.
+Deployment: `a041390d-43e9-4d12-9261-09cbed116db9`.
 
 ---
 
